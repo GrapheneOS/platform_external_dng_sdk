@@ -1,15 +1,10 @@
 /*****************************************************************************/
-// Copyright 2006-2012 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_host.h#2 $ */ 
-/* $DateTime: 2012/06/14 20:24:41 $ */
-/* $Change: 835078 $ */
-/* $Author: tknoll $ */
 
 /** \file
  * Class definition for dng_host, initial point of contact and control between
@@ -26,7 +21,9 @@
 #include "dng_auto_ptr.h"
 #include "dng_classes.h"
 #include "dng_errors.h"
+#include "dng_flags.h"
 #include "dng_types.h"
+#include "dng_uncopyable.h"
 
 /*****************************************************************************/
 
@@ -47,7 +44,7 @@
 /// establishing mutual exclusion for read/write access to a single dng_host 
 /// object if it is used in multiple threads.)
 
-class dng_host
+class dng_host: private dng_uncopyable
 	{
 	
 	private:
@@ -76,7 +73,7 @@ class dng_host
 		
 		uint32 fMinimumSize;
 		
-		// What is the preferred size for a preview image?  This can
+		// What is the preferred size for a preview image?	This can
 		// be slightly larger than the minimum size.  Zero if we want
 		// the full resolution image.
 		
@@ -87,7 +84,7 @@ class dng_host
 		
 		uint32 fMaximumSize;
 		
-		// The fraction of the image kept after a crop.  This is used to
+		// The fraction of the image kept after a crop.	 This is used to
 		// adjust the sizes to take into account the cropping that
 		// will be peformed.
 		
@@ -101,10 +98,32 @@ class dng_host
 		
 		bool fSaveLinearDNG;
 		
+		// Do we want to create JXL compressed in saved DNGs?
+		
+		bool fLossyMosaicJXL = false;
+		bool fLosslessJXL    = false;
+		
 		// Keep the original raw file data block?
 		
 		bool fKeepOriginalFile;
+		
+		// Should we ignore the enhanced IFD when reading DNGs?
+		
+		bool fIgnoreEnhanced;
+
+		// Is this host being used to perform a negative read for fast
+		// conversion to DNG? 
+
+		bool fForFastSaveToDNG;
+
+		uint32 fFastSaveToDNGSize;
+
+		bool fPreserveStage2;
 	
+		std::shared_ptr<const dng_jxl_encode_settings> fJXLEncodeSettings;
+		
+		std::shared_ptr<const dng_jxl_color_space_info> fJXLColorSpaceInfo;
+		
 	public:
 	
 		/// Allocate a dng_host object, possiblly with custom allocator and sniffer.
@@ -254,6 +273,30 @@ class dng_host
 			{
 			return fMaximumSize;
 			}
+
+		/// Setter for the perform fast save to DNG.
+		/// \param flag True if the host is being used to perform a negative
+		/// read for fast conversion to DNG, false otherwise.
+
+		void SetForFastSaveToDNG (bool flag,
+								  uint32 size)
+			{
+			fForFastSaveToDNG = flag;
+			fFastSaveToDNGSize = size;
+			}
+
+		/// Getter for the Boolean value that indicates whether this host is
+		/// being used to perform a negative read for fast conversion to DNG.
+		
+		bool ForFastSaveToDNG () const
+			{
+			return fForFastSaveToDNG;
+			}
+
+		uint32 FastSaveToDNGSize () const
+			{
+			return fFastSaveToDNGSize;
+			}
 			
 		/// Setter for the cropping factor.
 		/// \param cropFactor Fraction of image to be used after crop.
@@ -298,21 +341,69 @@ class dng_host
 
 		virtual bool SaveLinearDNG (const dng_negative &negative) const;
 			
-		/// Setter for flag determining whether to keep original RAW file data.	
-		/// \param keep If true, origianl RAW data will be kept.
+		/// Getter for flag determining whether to save DNG with lossy
+		/// compressed mosaic if possible.
+
+		bool LossyMosaicJXL () const
+			{
+			return fLossyMosaicJXL;
+			}
+			
+		/// Setter for flag determining whether to save DNG with lossy
+		/// compressed mosaic if possible.
+		/// \param want If true, attempt to save lossy compressed mosaic.
+
+		bool SetLossyMosaicJXL (bool want)
+			{
+			return fLossyMosaicJXL = want;
+			}
+			
+		/// Getter for flag determining whether to save DNG with lossless
+		/// compression if possible.
+
+		bool LosslessJXL () const
+			{
+			return fLosslessJXL;
+			}
+			
+		/// Setter for flag determining whether to save DNG with lossless
+		/// compression if possible.
+		/// \param want If true, attempt to save using lossless JXL.
+
+		bool SetLosslessJXL (bool want)
+			{
+			return fLosslessJXL = want;
+			}
+			
+		/// Setter for flag determining whether to keep original raw file data.
+		/// \param keep If true, original raw data will be kept.
 
 		void SetKeepOriginalFile (bool keep)
 			{
 			fKeepOriginalFile = keep;
 			}
 
-		/// Getter for flag determining whether to keep original RAW file data.	
+		/// Getter for flag determining whether to keep original raw file data.
 
 		bool KeepOriginalFile ()
 			{
 			return fKeepOriginalFile;
 			}
+			
+		/// Getter for ignored enhanced IFD flag.
 
+		bool IgnoreEnhanced () const
+			{
+			return fIgnoreEnhanced;
+			}
+			
+		/// Setter for ignored enhanced IFD flag.
+		
+		void SetIgnoreEnhanced (bool state)
+			{
+			fIgnoreEnhanced = state;
+			}
+		
 		/// Determine if an error is the result of a temporary, but planned-for
 		/// occurence such as user cancellation or memory exhaustion. This method is
 		/// sometimes used to determine whether to try and continue processing a DNG
@@ -331,7 +422,8 @@ class dng_host
 		/// \param area Rectangle over which to perform image processing task.
 
 		virtual void PerformAreaTask (dng_area_task &task,
-									  const dng_rect &area);
+									  const dng_rect &area,
+									  dng_area_task_progress *progress = NULL);
 									  
 		/// How many multiprocessing threads does PerformAreaTask use?
 		/// Default implementation always returns 1 since it is single threaded.
@@ -347,9 +439,7 @@ class dng_host
 		/// to ensure a derived class is used instead of dng_xmp.
 
 		#if qDNGUseXMP
-		
 		virtual dng_xmp * Make_dng_xmp ();
-		
 		#endif
 
 		/// Factory method for dng_shared class. Can be used to customize allocation 
@@ -373,12 +463,17 @@ class dng_host
 		virtual dng_image * Make_dng_image (const dng_rect &bounds,
 											uint32 planes,
 											uint32 pixelType);
-					      		 
-		/// Factory method for parsing dng_opcode based classs. Can be used to 
+								 
+		/// Factory method for parsing dng_opcode based class. Can be used to 
 		/// override opcode implementations.
 		
 		virtual dng_opcode * Make_dng_opcode (uint32 opcodeID,
 											  dng_stream &stream);
+											  
+		/// Factory method for making a dng_rgb_to_rgb_table_data based class.
+		
+		virtual dng_rgb_to_rgb_table_data *
+			Make_dng_rgb_to_rgb_table_data (const dng_rgb_table &table);
 											  
 		/// Factory method to apply a dng_opcode_list. Can be used to override
 		/// opcode list applications.
@@ -392,19 +487,78 @@ class dng_host
 		
 		virtual void ResampleImage (const dng_image &srcImage,
 									dng_image &dstImage);
+
+		/// Getter for flag determining whether we should preserve the stage 2
+		/// image after building the stage 3 image.
+
+		bool WantsPreserveStage2 () const
+			{
+			return fPreserveStage2;
+			}
+
+		/// Setter for flag determining whether we should preserve the stage 2
+		/// image after building the stage 3 image.
+
+		void SetWantsPreserveStage2 (bool flag)
+			{
+			fPreserveStage2 = flag;
+			}
+
+		/// JXL compression API.
+
+		void SetJXLEncodeSettings (const dng_jxl_encode_settings &settings);
 		
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-	
-		dng_host (const dng_host &host);
+		const dng_jxl_encode_settings * JXLEncodeSettings () const
+			{
+			return fJXLEncodeSettings.get ();
+			}
+			
+		void SetJXLColorSpaceInfo (std::shared_ptr<const dng_jxl_color_space_info> info)
+			{
+			fJXLColorSpaceInfo = info;
+			}
 		
-		dng_host & operator= (const dng_host &host);
-		
+		const dng_jxl_color_space_info * JXLColorSpaceInfo () const
+			{
+			return fJXLColorSpaceInfo.get ();
+			}
+			
+		std::shared_ptr<const dng_jxl_color_space_info> ShareJXLColorSpaceInfo () const
+			{
+			return fJXLColorSpaceInfo;
+			}
+			
+		enum use_case_enum
+			{
+			use_case_LossyMosaic,
+			use_case_LosslessMosaic,
+			use_case_MainImage,
+			use_case_LosslessMainImage,
+			use_case_EncodedMainImage,
+			use_case_ProxyImage,
+			use_case_EnhancedImage,
+			use_case_LosslessEnhancedImage,
+			use_case_MergeResults,
+			use_case_Transparency,
+			use_case_LosslessTransparency,
+			use_case_Depth,
+			use_case_LosslessDepth,
+			use_case_SemanticMask,
+			use_case_LosslessSemanticMask,
+			use_case_RenderedPreview,
+			use_case_GainMap,
+			use_case_LosslessGainMap
+			};
+			
+		virtual dng_jxl_encode_settings *
+			MakeJXLEncodeSettings (use_case_enum useCase,
+								   const dng_image &image,
+								   const dng_negative *negative = nullptr) const;
+
 	};
 	
 /*****************************************************************************/
 
-#endif
+#endif	//  __dng_host__
 	
 /*****************************************************************************/

@@ -23,9 +23,13 @@ cc_fuzz {
     ],
     static_libs: [
         "libdng_sdk",
+        "libexpat",
         "libjpeg",
         "liblog",
         "libz",
+        "libjxl",
+        "libhwy",
+        "libbrotli",
     ],
     target: {
         darwin: {

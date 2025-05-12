@@ -1,18 +1,13 @@
 /*****************************************************************************/
-// Copyright 2006-2008 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
 
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_image.h#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
 /** \file
- *  Support for working with image data in DNG SDK.
+ *	Support for working with image data in DNG SDK.
  */
 
 /*****************************************************************************/
@@ -29,13 +24,15 @@
 #include "dng_rect.h"
 #include "dng_tag_types.h"
 #include "dng_types.h"
+#include "dng_uncopyable.h"
 
 /*****************************************************************************/
 
 /// \brief Class to get resource acquisition is instantiation behavior for tile
 /// buffers. Can be dirty or constant tile access.
 
-class dng_tile_buffer: public dng_pixel_buffer
+class dng_tile_buffer: public dng_pixel_buffer,
+					   private dng_uncopyable
 	{
 	
 	protected:
@@ -69,14 +66,6 @@ class dng_tile_buffer: public dng_pixel_buffer
 			return fRefData;
 			}
 			
-	private:
-
-		// Hidden copy constructor and assignment operator.
-	
-		dng_tile_buffer (const dng_tile_buffer &buffer);
-		
-		dng_tile_buffer & operator= (const dng_tile_buffer &buffer);
-	
 	};
 
 /*****************************************************************************/
@@ -166,7 +155,20 @@ class dng_image
 			
 			/// Repeat edge pixels, except for last plane which is zero padded.
 			
-			edge_repeat_zero_last
+			edge_repeat_zero_last,
+
+			/// Wrap edge pixels horizontally, repeat edge pixels vertically.
+
+			edge_wrap_horizontal,
+			
+			/// Wrap edge pixels vertically, repeat edge pixels horizontally.
+
+			edge_wrap_vertical,
+			
+			/// Wrap edge pixels in all directions (horizontal, vertical,
+			/// diagonal).
+
+			edge_wrap_all
 			
 			};
 	
@@ -251,9 +253,11 @@ class dng_image
 		/// \param buffer Receives resulting pixel buffer.
 		/// \param edgeOption edge_option describing how to pad edges.
 		/// \param repeatV Amount of repeated padding needed in vertical for
-		/// edge_repeat and edge_repeat_zero_last edgeOption cases.
-		/// \param repeatH Amount of repeated padding needed in horizontal for 
-		/// edge_repeat and edge_repeat_zero_last edgeOption cases.
+		/// edge_repeat, edge_repeat_zero_last, and edge_wrap_horizontal
+		/// edgeOption cases.
+		/// \param repeatH Amount of repeated padding needed in horizontal for
+		/// edge_repeat, edge_repeat_zero_last, and edge_wrap_vertical
+		/// edgeOption cases.
 
 		void Get (dng_pixel_buffer &buffer,
 				  edge_option edgeOption = edge_none,
@@ -275,6 +279,11 @@ class dng_image
 
 		virtual void Rotate (const dng_orientation &orientation);
 		
+		/// Offset image.
+		/// \param offset Offset amount.
+		
+		virtual void Offset (const dng_point &offset);
+		
 		/// Copy image data from an area of one image to same area of another.
 		/// \param src Image to copy from.
 		/// \param area Rectangle of images to copy.
@@ -286,7 +295,12 @@ class dng_image
 					   const dng_rect &area,
 					   uint32 srcPlane,
 					   uint32 dstPlane,
-					   uint32 planes);
+					   uint32 planes)
+			{
+
+			DoCopyArea (src, area, srcPlane, dstPlane, planes);
+
+			}
 
 		/// Copy image data from an area of one image to same area of another.
 		/// \param src Image to copy from.
@@ -299,9 +313,9 @@ class dng_image
 					   uint32 plane,
 					   uint32 planes)
 			{
-			
-			CopyArea (src, area, plane, plane, planes);
-			
+
+			DoCopyArea (src, area, plane, plane, planes);
+
 			}
 
 		/// Return true if the contents of an area of the image are the same as those of another.
@@ -310,10 +324,10 @@ class dng_image
 		/// \param plane Plane to start comparing.
 		/// \param planes Number of planes to compare.
 
-		bool EqualArea (const dng_image &rhs,
-						const dng_rect &area,
-						uint32 plane,
-						uint32 planes) const;
+		virtual bool EqualArea (const dng_image &rhs,
+								const dng_rect &area,
+								uint32 plane,
+								uint32 planes) const;
 						
 		// Routines to set the entire image to a constant value.
 		
@@ -399,6 +413,11 @@ class dng_image
 			{
 			SetConstant_real32 (value, Bounds ());
 			}
+
+		void SetZero (const dng_rect &area)
+			{
+			SetConstant (0, area);
+			}
 		
 		virtual void GetRepeat (dng_pixel_buffer &buffer,
 								const dng_rect &srcArea,
@@ -415,6 +434,12 @@ class dng_image
 		virtual void DoGet (dng_pixel_buffer &buffer) const;
 		
 		virtual void DoPut (const dng_pixel_buffer &buffer);
+
+		virtual void DoCopyArea (const dng_image &src,
+								 const dng_rect &area,
+								 uint32 srcPlane,
+								 uint32 dstPlane,
+								 uint32 planes);
 
 		void GetEdge (dng_pixel_buffer &buffer,
 					  edge_option edgeOption,

@@ -1,15 +1,10 @@
 /*****************************************************************************/
-// Copyright 2006 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_auto_ptr.h#2 $ */ 
-/* $DateTime: 2012/07/11 10:36:56 $ */
-/* $Change: 838485 $ */
-/* $Author: tknoll $ */
 
 /** \file
  * Class to implement std::auto_ptr like functionality even on platforms which do not
@@ -21,11 +16,12 @@
 #ifndef __dng_auto_ptr__
 #define __dng_auto_ptr__
 
-#include "dng_memory.h"
-
 #include <memory>
 #include <stddef.h>
 #include <stdlib.h>
+
+#include "dng_memory.h"
+#include "dng_uncopyable.h"
 
 /*****************************************************************************/
 
@@ -39,7 +35,7 @@
 /// Release on the AutoPtr first.
 
 template<class T>
-class AutoPtr
+class AutoPtr: private dng_uncopyable
 	{
 	
 	private:
@@ -107,15 +103,6 @@ class AutoPtr
 			y.p_ = temp;
 			}
 		
-	private:
-	
-		// Hidden copy constructor and assignment operator. I don't think the STL
-		// "feature" of grabbing ownership of the pointer is a good idea.
-	
-		AutoPtr (AutoPtr<T> &rhs);
-
-		AutoPtr<T> & operator= (AutoPtr<T> &rhs);
-		
 	};
 
 /*****************************************************************************/
@@ -182,14 +169,15 @@ void AutoPtr<T>::Alloc ()
 /// deletes the underlying memory on scope exit.
 ///
 /// T is not required to be movable. The class is implemented using
-/// dng_std_vector but purposely does not use any member functions that require
-/// T to be movable.
+/// dng_std_vector but purposely does not use any member functions that
+/// require T to be movable.
 
 template<typename T>
-class AutoArray
+class AutoArray: private dng_uncopyable
 	{
 
 	public:
+		
 		/// Construct an AutoArray that refers to a null pointer.
 
 		AutoArray () { }
@@ -199,7 +187,7 @@ class AutoArray
 		/// dng_exception with error code dng_error_memory is thrown.
 
 		explicit AutoArray (size_t count)
-			: vector_(new dng_std_vector<T>(count))
+			: fVector (new dng_std_vector<T> (count))
 			{
 			}
 
@@ -210,7 +198,7 @@ class AutoArray
 
 		void Reset (size_t count)
 			{
-			vector_.reset(new dng_std_vector<T>(count));
+			fVector.reset (new dng_std_vector<T> (count));
 			}
 
 		/// Allows indexing into the AutoArray. The index 'i' must be
@@ -219,26 +207,27 @@ class AutoArray
 
 		T &operator[] (ptrdiff_t i)
 			{
-			return (*vector_) [i];
+			return (*fVector) [i];
 			}
 		const T &operator[] (ptrdiff_t i) const
 			{
-			return (*vector_) [i];
+			return (*fVector) [i];
 			}
 
 		/// Return a pointer to the beginning of the array.
 
 		T *Get ()
 			{
-			if (vector_)
-				return vector_->data();
+			if (fVector)
+				return fVector->data ();
 			else
 				return nullptr;
 			}
+		
 		const T *Get () const
 			{
-			if (vector_)
-				return vector_->data();
+			if (fVector)
+				return fVector->data ();
 			else
 				return nullptr;
 			}
@@ -253,7 +242,7 @@ class AutoArray
 
 	private:
 
-		std::unique_ptr<dng_std_vector<T> > vector_;
+		std::unique_ptr<dng_std_vector<T> > fVector;
 
 	};
 
