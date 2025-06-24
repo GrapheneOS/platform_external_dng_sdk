@@ -1,24 +1,27 @@
 /*****************************************************************************/
-// Copyright 2006-2023 Adobe Systems Incorporated
+// Copyright 2006-2008 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_camera_profile.cpp#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
 
 #include "dng_camera_profile.h"
 
 #include "dng_1d_table.h"
 #include "dng_assertions.h"
 #include "dng_color_space.h"
-#include "dng_gain_map.h"
 #include "dng_host.h"
 #include "dng_exceptions.h"
 #include "dng_image_writer.h"
 #include "dng_info.h"
 #include "dng_parse_utils.h"
 #include "dng_safe_arithmetic.h"
-#include "dng_shared.h"
 #include "dng_tag_codes.h"
 #include "dng_tag_types.h"
 #include "dng_temperature.h"
@@ -32,100 +35,33 @@ const char * kAdobeCalibrationSignature = "com.adobe";
 
 /*****************************************************************************/
 
-const char * kProfileName_GroupPrefix = "Group: ";
-
-/*****************************************************************************/
-
-bool HasProfileGroupPrefix (const dng_string &name)
-	{
-	
-	return name.StartsWith (kProfileName_GroupPrefix, true) &&
-		   name.Length () > strlen (kProfileName_GroupPrefix);
-	
-	}
-
-/*****************************************************************************/
-
-dng_string StripProfileGroupPrefix (const dng_string &name)
-	{
-	
-	if (HasProfileGroupPrefix (name))
-		{
-		
-		dng_string result (name.Get () + strlen (kProfileName_GroupPrefix));
-		
-		return result;
-		
-		}
-	
-	return name;
-	
-	}
-
-/*****************************************************************************/
-/*****************************************************************************/
-/*****************************************************************************/
-
-void dng_camera_profile_id::AddDigest (dng_md5_printer &printer) const
-	{
-	
-	printer.Process ("DCPI", 4);
-
-	if (Name ().NotEmpty ())
-		{
-		
-		printer.Process (Name ().Get (),
-						 Name ().Length ());
-		
-		}
-
-	if (Fingerprint ().IsValid ())
-		{
-		
-		printer.Process (fFingerprint.data,
-						 uint32 (sizeof (fFingerprint.data)));
-		
-		}
-	
-	}
-
-/*****************************************************************************/
-/*****************************************************************************/
-/*****************************************************************************/
-
 dng_camera_profile::dng_camera_profile ()
 
 	:	fName ()
 	,	fCalibrationIlluminant1 (lsUnknown)
 	,	fCalibrationIlluminant2 (lsUnknown)
-	,	fCalibrationIlluminant3 (lsUnknown)
 	,	fColorMatrix1 ()
 	,	fColorMatrix2 ()
-	,	fColorMatrix3 ()
 	,	fForwardMatrix1 ()
 	,	fForwardMatrix2 ()
-	,	fForwardMatrix3 ()
 	,	fReductionMatrix1 ()
 	,	fReductionMatrix2 ()
-	,	fReductionMatrix3 ()
 	,	fFingerprint ()
-	,	fRenderDataFingerprint ()
 	,	fCopyright ()
 	,	fEmbedPolicy (pepAllowCopying)
 	,	fHueSatDeltas1 ()
 	,	fHueSatDeltas2 ()
-	,	fHueSatDeltas3 ()
 	,	fHueSatMapEncoding (encoding_Linear)
 	,	fLookTable ()
 	,	fLookTableEncoding (encoding_Linear)
 	,	fBaselineExposureOffset (0, 100)
 	,	fDefaultBlackRender (defaultBlackRender_Auto)
 	,	fToneCurve ()
-	,	fToneMethod (profileToneMethod_Unspecified)
 	,	fProfileCalibrationSignature ()
 	,	fUniqueCameraModelRestriction ()
 	,	fWasReadFromDNG (false)
 	,	fWasReadFromDisk (false)
+	,	fWasBuiltinMatrix (false)
 	,	fWasStubbed (false)
 	
 	{
@@ -143,43 +79,9 @@ dng_camera_profile::~dng_camera_profile ()
 
 /*****************************************************************************/
 
-uint32 dng_camera_profile::IlluminantModel () const
+real64 dng_camera_profile::IlluminantToTemperature (uint32 light)
 	{
-
-	// Start by assuming we have a single-illuminant model.
 	
-	uint32 model = 1;
-
-	// If we have a 2nd calibration illuminant and 2nd color matrix, then
-	// assume we are using the dual-illuminnt model.
-
-	if ((CalibrationIlluminant2 () != lsUnknown) && HasColorMatrix2 ())
-		{
-		
-		model = 2;
-
-		// If we also have a 3rd calibration illuminant and 3rd color matrix,
-		// then assume we are using the triple-illuminnt model.
-
-		if ((CalibrationIlluminant3 () != lsUnknown) && HasColorMatrix3 ())
-			{
-			
-			model = 3;
-			
-			}
-		
-		}
-
-	return model;
-	
-	}
-
-/*****************************************************************************/
-
-real64 dng_camera_profile::IlluminantToTemperature (uint32 light,
-													const dng_illuminant_data &data)
-	{
-
 	switch (light)
 		{
 		
@@ -245,11 +147,6 @@ real64 dng_camera_profile::IlluminantToTemperature (uint32 light,
 		case lsWarmWhiteFluorescent:
 			{
 			return (2600.0 + 3250.0) * 0.5;
-			}
-
-		case lsOther:
-			{
-			return dng_temperature (data.WhiteXY ()).Temperature ();
 			}
 			
 		default:
@@ -318,19 +215,6 @@ void dng_camera_profile::SetColorMatrix2 (const dng_matrix &m)
 		
 /******************************************************************************/
 
-void dng_camera_profile::SetColorMatrix3 (const dng_matrix &m)
-	{
-	
-	fColorMatrix3 = m;
-	
-	NormalizeColorMatrix (fColorMatrix3);
-	
-	ClearFingerprint ();
-
-	}
-		
-/******************************************************************************/
-
 // Make sure the forward matrix maps to exactly the PCS.
 
 void dng_camera_profile::NormalizeForwardMatrix (dng_matrix &m)
@@ -381,19 +265,6 @@ void dng_camera_profile::SetForwardMatrix2 (const dng_matrix &m)
 
 /*****************************************************************************/
 
-void dng_camera_profile::SetForwardMatrix3 (const dng_matrix &m)
-	{
-	
-	fForwardMatrix3 = m;
-	
-	fForwardMatrix3.Round (10000);
-	
-	ClearFingerprint ();
-	
-	}
-
-/*****************************************************************************/
-
 void dng_camera_profile::SetReductionMatrix1 (const dng_matrix &m)
 	{
 	
@@ -413,19 +284,6 @@ void dng_camera_profile::SetReductionMatrix2 (const dng_matrix &m)
 	fReductionMatrix2 = m;
 	
 	fReductionMatrix2.Round (10000);
-	
-	ClearFingerprint ();
-
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetReductionMatrix3 (const dng_matrix &m)
-	{
-	
-	fReductionMatrix3 = m;
-	
-	fReductionMatrix3.Round (10000);
 	
 	ClearFingerprint ();
 
@@ -453,17 +311,6 @@ bool dng_camera_profile::HasColorMatrix2 () const
 		
 /*****************************************************************************/
 
-bool dng_camera_profile::HasColorMatrix3 () const
-	{
-
-	return fColorMatrix3.Cols () == 3 &&
-		   fColorMatrix3.Rows () == fColorMatrix2.Rows () &&
-		   fColorMatrix3.Rows () == fColorMatrix1.Rows ();
-	
-	}
-		
-/*****************************************************************************/
-
 void dng_camera_profile::SetHueSatDeltas1 (const dng_hue_sat_map &deltas1)
 	{
 
@@ -479,17 +326,6 @@ void dng_camera_profile::SetHueSatDeltas2 (const dng_hue_sat_map &deltas2)
 	{
 
 	fHueSatDeltas2 = deltas2;
-
-	ClearFingerprint ();
-
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetHueSatDeltas3 (const dng_hue_sat_map &deltas3)
-	{
-
-	fHueSatDeltas3 = deltas3;
 
 	ClearFingerprint ();
 
@@ -558,7 +394,7 @@ static void FingerprintHueSatMap (dng_md5_printer_stream &printer,
 
 /*****************************************************************************/
 
-dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) const
+void dng_camera_profile::CalculateFingerprint () const
 	{
 	
 	DNG_ASSERT (!fWasStubbed, "CalculateFingerprint on stubbed profile");
@@ -572,7 +408,7 @@ dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) c
 	// The data that we fingerprint closely matches that saved
 	// by the profile_tag_set class in dng_image_writer.cpp, with
 	// the exception of the fingerprint itself.
-
+	
 	if (HasColorMatrix1 ())
 		{
 
@@ -597,8 +433,6 @@ dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) c
 			FingerprintMatrix (printer, fReductionMatrix1);
 			
 			}
-
-		// Only include 2nd color matrix if we have 1st color matrix.
 		
 		if (HasColorMatrix2 ())
 			{
@@ -622,68 +456,24 @@ dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) c
 				FingerprintMatrix (printer, fReductionMatrix2);
 				
 				}
-
-			// Only include 3rd color matrix if we have 2nd color matrix
-			// (which means we also have the 1st color matrix).
-		
-			if (HasColorMatrix3 ())
-				{
-
-				printer.Put_uint16 ((uint16) fCalibrationIlluminant3);
-
-				FingerprintMatrix (printer, fColorMatrix3);
-
-				if (fForwardMatrix3.Rows () == fColorMatrix3.Cols () &&
-					fForwardMatrix3.Cols () == fColorMatrix3.Rows ())
-					{
-
-					FingerprintMatrix (printer, fForwardMatrix3);
-
-					}
-
-				if (colorChannels > 3 && fReductionMatrix3.Rows () *
-										 fReductionMatrix3.Cols () == colorChannels * 3)
-					{
-
-					FingerprintMatrix (printer, fReductionMatrix3);
-
-					}
-
-				} // has color matrix 3
-
-			} // has color matrix 2
-   
-		if (!renderDataOnly)
-			{
-		
-			printer.Put (fName.Get	  (),
-						 fName.Length ());
-				
-			printer.Put (fGroupName.Get	   (),
-						 fGroupName.Length ());
 				
 			}
+		
+		printer.Put (fName.Get    (),
+					 fName.Length ());
 
-		printer.Put (fProfileCalibrationSignature.Get	 (),
+		printer.Put (fProfileCalibrationSignature.Get    (),
 					 fProfileCalibrationSignature.Length ());
 
-		if (!renderDataOnly)
-			{
+		printer.Put_uint32 (fEmbedPolicy);
 		
-			printer.Put_uint32 (fEmbedPolicy);
-			
-			printer.Put (fCopyright.Get	   (),
-						 fCopyright.Length ());
-				
-			}
+		printer.Put (fCopyright.Get    (),
+					 fCopyright.Length ());
 					 
 		bool haveHueSat1 = HueSatDeltas1 ().IsValid ();
 		
 		bool haveHueSat2 = HueSatDeltas2 ().IsValid () &&
 						   HasColorMatrix2 ();
-
-		bool haveHueSat3 = HueSatDeltas3 ().IsValid () &&
-						   HasColorMatrix3 ();
 
 		if (haveHueSat1)
 			{
@@ -699,14 +489,7 @@ dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) c
 			
 			}
 
-		if (haveHueSat3)
-			{
-			
-			FingerprintHueSatMap (printer, fHueSatDeltas3);
-			
-			}
-
-		if (haveHueSat1 || haveHueSat2 || haveHueSat3)
+		if (haveHueSat1 || haveHueSat2)
 			{
 
 			if (fHueSatMapEncoding != 0)
@@ -764,101 +547,10 @@ dng_fingerprint dng_camera_profile::CalculateFingerprint (bool renderDataOnly) c
 				
 			}
 			
-		if (fToneMethod != profileToneMethod_Unspecified)
-			{
-			
-			printer.Put_int32 (fToneMethod);
-			
-			}
-			
 		}
 
-	// ProfileGainTableMap.
+	fFingerprint = printer.Result ();
 
-		{
-
-		auto pgtm = ShareProfileGainTableMap ();
-
-		if (pgtm)
-			{
-			
-			dng_fingerprint digest = pgtm->GetFingerprint ();
-
-			printer.Put (digest.data,
-						 uint32 (sizeof (digest.data)));
-			
-			}
-
-		}
-
-	// ProfileDynamicRange.
-		
-		{
-			
-		const auto &range = DynamicRangeInfo ();
-
-		if (range.IsHDR ())
-			{
-			
-			printer.Put ("hdr", 3);
-
-			if (range.fHintMaxOutputValue != 1.0f)
-				printer.Put (&range.fHintMaxOutputValue,
-							 uint32 (sizeof (range.fHintMaxOutputValue)));
-			
-			}
-			
-		}
-
-	// RGBTables.
-
-	if (HasMaskedRGBTables ())
-		{
-		
-		dng_md5_printer rgbTablesPrinter;
-		
-		MaskedRGBTables ().AddDigest (rgbTablesPrinter);
-		
-		auto rgbTableDigest = rgbTablesPrinter.Result ();
-		
-		printer.Put (rgbTableDigest.data,
-					 uint32 (sizeof (rgbTableDigest.data)));
-		
-		}
-
-	return printer.Result ();
-
-	}
-
-/******************************************************************************/
-
-dng_fingerprint dng_camera_profile::UniqueID () const
-	{
-
-	dng_md5_printer_stream printer;
-
-	// MD5 hash is always calculated on little endian data.
-
-	printer.SetLittleEndian ();
-
-	// Start with the existing fingerprint.
- 
-	dng_fingerprint fingerprint = Fingerprint ();
-	
-	printer.Put (fingerprint.data,
-				 (uint32) sizeof (fingerprint.data));
-
-	// Also include the UniqueCameraModelRestriction tag.
-
-	printer.Put (fUniqueCameraModelRestriction.Get	  (),
-				 fUniqueCameraModelRestriction.Length ());
-
-	// Add any other needed fields here.
-
-	// ...
-
-	return printer.Result ();
-	
 	}
 
 /******************************************************************************/
@@ -898,10 +590,6 @@ bool dng_camera_profile::ValidForwardMatrix (const dng_matrix &m)
 
 bool dng_camera_profile::IsValid (uint32 channels) const
 	{
-
-	bool hasFirstTwoColorMatrices = false;
-	
-	bool hasThreeColorMatrices = false;
 	
 	// For Monochrome images, we ignore the camera profile.
 		
@@ -927,7 +615,7 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 		return false;
 		
 		}
-
+		
 	// ColorMatrix2 is optional, but it must be valid if present.
 	
 	if (fColorMatrix2.Cols () != 0 ||
@@ -947,54 +635,9 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 			return false;
 			
 			}
-
-		// If we reached here, it means we have ColorMatrix1 and ColorMatrix2.
-
-		hasFirstTwoColorMatrices = true;
 		
 		}
 		
-	// ColorMatrix3 is optional, but it must be valid if present.
-	
-	if (fColorMatrix3.Cols () != 0 ||
-		fColorMatrix3.Rows () != 0)
-		{
-		
-		if (fColorMatrix3.Cols () != 3 ||
-			fColorMatrix3.Rows () != channels)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ColorMatrix3 is wrong size");
-						 
-			#endif
-					 
-			return false;
-			
-			}
-
-		// Furthermore, the first two color matrices must also be present.
-
-		if (!hasFirstTwoColorMatrices)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ColorMatrix3 present without ColorMatrix1/ColorMatrix2");
-						 
-			#endif
-					 
-			return false;
-			
-			}
-
-		// If we reached here, it means we have all three color matrices defined.
-
-		hasThreeColorMatrices = true;
-		
-		}
-
 	// ForwardMatrix1 is optional, but it must be valid if present.
 	
 	if (fForwardMatrix1.Cols () != 0 ||
@@ -1069,58 +712,6 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 				
 		}
 
-	// ForwardMatrix3 is optional, but it must be valid if present.
-	
-	if (fForwardMatrix3.Cols () != 0 ||
-		fForwardMatrix3.Rows () != 0)
-		{
-		
-		if (fForwardMatrix3.Rows () != 3 ||
-			fForwardMatrix3.Cols () != channels)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ForwardMatrix3 is wrong size");
-						 
-			#endif
-						 
-			return false;
-			
-			}
-
-		// Make sure ForwardMatrix3 does a valid mapping.
-		
-		if (!ValidForwardMatrix (fForwardMatrix3))
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ForwardMatrix3 does not map equal camera values to XYZ D50");
-						 
-			#endif
-						 
-			return false;
-		
-			}
-
-		// ForwardMatrix3 is only allowed if we have three color matrices.
-
-		if (!hasThreeColorMatrices)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ForwardMatrix3 present without three color matrices");
-						 
-			#endif
-					 
-			return false;
-			
-			}
-		
-		}
-
 	// ReductionMatrix1 is optional, but it must be valid if present.
 	
 	if (fReductionMatrix1.Cols () != 0 ||
@@ -1165,44 +756,7 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 		
 		}
 		
-	// ReductionMatrix3 is optional, but it must be valid if present.
-	
-	if (fReductionMatrix3.Cols () != 0 ||
-		fReductionMatrix3.Rows () != 0)
-		{
-		
-		if (fReductionMatrix3.Cols () != channels ||
-			fReductionMatrix3.Rows () != 3)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ReductionMatrix3 is wrong size");
-						 
-			#endif
-					 
-			return false;
-			
-			}
-		
-		// ReductionMatrix3 is only allowed if we have three color matrices.
-
-		if (!hasThreeColorMatrices)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ReductionMatrix3 present without three color matrices");
-						 
-			#endif
-					 
-			return false;
-			
-			}
-		
-		}
-		
-	// Make sure ColorMatrix1 is invertible.
+	// Make sure ColorMatrix1 is invertable.
 	
 	try
 		{
@@ -1229,7 +783,7 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 			
 		#if qDNGValidate
 	
-		ReportError ("ColorMatrix1 is not invertible");
+		ReportError ("ColorMatrix1 is not invertable");
 					 
 		#endif
 					 
@@ -1237,7 +791,7 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 	
 		}
 		
-	// Make sure ColorMatrix2 is invertible.
+	// Make sure ColorMatrix2 is invertable.
 	
 	if (fColorMatrix2.NotEmpty ())
 		{
@@ -1267,7 +821,7 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 				
 			#if qDNGValidate
 	
-			ReportError ("ColorMatrix2 is not invertible");
+			ReportError ("ColorMatrix2 is not invertable");
 						 
 			#endif
 						 
@@ -1275,200 +829,37 @@ bool dng_camera_profile::IsValid (uint32 channels) const
 		
 			}
 			
-		}
-
-	// Make sure ColorMatrix3 is invertible.
-	
-	if (fColorMatrix3.NotEmpty ())
-		{
-						
-		try
-			{
-			
-			if (fReductionMatrix3.NotEmpty ())
-				{
-				
-				(void) Invert (fColorMatrix3,
-							   fReductionMatrix3);
-				
-				}
-				
-			else
-				{
-			
-				(void) Invert (fColorMatrix3);
-				
-				}
-
-			}
-			
-		catch (...)
-			{
-				
-			#if qDNGValidate
-	
-			ReportError ("ColorMatrix3 is not invertible");
-						 
-			#endif
-						 
-			return false;
-		
-			}
-			
-		}
-
-	// If this is a triple-illuminant profile, then we have some extra
-	// requirements.
-
-	if (IlluminantModel () == 3)
-		{
-		
-		// None of the illuminants can be unknown.
-
-		if (CalibrationIlluminant1 () == lsUnknown ||
-			CalibrationIlluminant2 () == lsUnknown ||
-			CalibrationIlluminant3 () == lsUnknown)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("CalibrationIlluminant1/2/3 cannot be unknown for "
-						 "a triple-illuminant profile");
-						 
-			#endif
-
-			return false;
-			
-			}
-
-		// All of the illuminants must be distinct.
-
-		dng_illuminant_data light1 (CalibrationIlluminant1 (), &IlluminantData1 ());
-		dng_illuminant_data light2 (CalibrationIlluminant2 (), &IlluminantData2 ());
-		dng_illuminant_data light3 (CalibrationIlluminant3 (), &IlluminantData3 ());
-		
-		dng_xy_coord white1 = light1.WhiteXY ();
-		dng_xy_coord white2 = light2.WhiteXY ();
-		dng_xy_coord white3 = light3.WhiteXY ();
-
-		if (white1 == white2 ||
-			white1 == white3 ||
-			white2 == white3)
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("In a triple-illuminant profile all three illuminants "
-						 "must be distinct");
-						 
-			#endif
-
-			return false;
-			
-			}
-
-		// We must have all three color matrices.
-
-		if (!HasColorMatrix1 () ||
-			!HasColorMatrix2 () ||
-			!HasColorMatrix3 ())
-			{
-			
-			#if qDNGValidate
-		
-			ReportError ("ColorMatrix1/2/3 must all be present and valid for "
-						 "a triple-illuminant profile");
-						 
-			#endif			
-			
-			return false;
-			
-			}
-
-		// ForwardMatrix must be present for all or absent for all.
-
-		if (ForwardMatrix1 ().NotEmpty () ||
-			ForwardMatrix2 ().NotEmpty () ||
-			ForwardMatrix3 ().NotEmpty ())
-			{
-			
-			if (ForwardMatrix1 ().IsEmpty () ||
-				ForwardMatrix2 ().IsEmpty () ||
-				ForwardMatrix3 ().IsEmpty ())
-				{
-				
-				#if qDNGValidate
-
-				ReportError ("For a triple-illuminant profile, ForwardMatrix "
-							 "must be absent for all three illuminants, or "
-							 "present for all three illuminants");
-
-				#endif			
-
-				return false;
-				
-				}
-			
-			}
-
-		// ReductionMatrix must be present for all or absent for all.
-		
-		if (ReductionMatrix1 ().NotEmpty () ||
-			ReductionMatrix2 ().NotEmpty () ||
-			ReductionMatrix3 ().NotEmpty ())
-			{
-			
-			if (ReductionMatrix1 ().IsEmpty () ||
-				ReductionMatrix2 ().IsEmpty () ||
-				ReductionMatrix3 ().IsEmpty ())
-				{
-				
-				#if qDNGValidate
-
-				ReportError ("For a triple-illuminant profile, ReductionMatrix "
-							 "must be absent for all three illuminants, or "
-							 "present for all three illuminants");
-
-				#endif			
-
-				return false;
-				
-				}
-			
-			}
-
-		// Hue sat map must be present for all or absent for all.
-		
-		if (HueSatDeltas1 ().IsValid () ||
-			HueSatDeltas2 ().IsValid () ||
-			HueSatDeltas3 ().IsValid ())
-			{
-			
-			if (HueSatDeltas1 ().IsNull () ||
-				HueSatDeltas2 ().IsNull () ||
-				HueSatDeltas3 ().IsNull ())
-				{
-				
-				#if qDNGValidate
-
-				ReportError ("For a triple-illuminant profile, HueSatDeltas "
-							 "must be absent for all three illuminants, or "
-							 "present for all three illuminants");
-
-				#endif			
-
-				return false;
-				
-				}
-			
-			}
-
 		}
 
 	return true;
 	
 	}
+		
+/*****************************************************************************/
 
+bool dng_camera_profile::EqualData (const dng_camera_profile &profile) const
+	{
+
+	return fCalibrationIlluminant1				== profile.fCalibrationIlluminant1				&&
+		   fCalibrationIlluminant2				== profile.fCalibrationIlluminant2				&&
+		   fColorMatrix1						== profile.fColorMatrix1						&&
+		   fColorMatrix2						== profile.fColorMatrix2						&&
+		   fForwardMatrix1						== profile.fForwardMatrix1						&&
+		   fForwardMatrix2						== profile.fForwardMatrix2						&&
+		   fReductionMatrix1					== profile.fReductionMatrix1					&&
+		   fReductionMatrix2					== profile.fReductionMatrix2					&&
+		   fHueSatDeltas1						== profile.fHueSatDeltas1						&&
+		   fHueSatDeltas2						== profile.fHueSatDeltas2						&&
+		   fHueSatMapEncoding					== profile.fHueSatMapEncoding					&&
+		   fLookTable							== profile.fLookTable							&&
+		   fLookTableEncoding					== profile.fLookTableEncoding					&&
+		   fDefaultBlackRender					== profile.fDefaultBlackRender					&&
+		   fToneCurve							== profile.fToneCurve							&&
+		   fBaselineExposureOffset.As_real64 () == profile.fBaselineExposureOffset.As_real64 () &&
+		   fProfileCalibrationSignature			== profile.fProfileCalibrationSignature;
+
+	}
+		
 /*****************************************************************************/
 
 void dng_camera_profile::ReadHueSatMap (dng_stream &stream,
@@ -1503,9 +894,7 @@ void dng_camera_profile::ReadHueSatMap (dng_stream &stream,
 			}
 			
 		}
-
-	hueSatMap.AssignNewUniqueRuntimeFingerprint ();
-
+	
 	}
 
 /*****************************************************************************/
@@ -1544,16 +933,7 @@ void dng_camera_profile::Parse (dng_stream &stream,
 		SetReductionMatrix1 (profileInfo.fReductionMatrix1);
 		
 		}
-
-	if (CalibrationIlluminant1 () == lsOther)
-		{
 		
-		SetIlluminantData1 (profileInfo.fIlluminantData1);
-		
-		}
-
-	// Deal with 2nd illuminant.
-
 	if (profileInfo.fColorMatrix2.NotEmpty ())
 		{
 		
@@ -1574,62 +954,23 @@ void dng_camera_profile::Parse (dng_stream &stream,
 			SetReductionMatrix2 (profileInfo.fReductionMatrix2);
 			
 			}
-
-		if (CalibrationIlluminant2 () == lsOther)
-			{
-
-			SetIlluminantData2 (profileInfo.fIlluminantData2);
-
-			}
-
-		}
-
-	// Deal with 3rd illuminant.
-
-	if (profileInfo.fColorMatrix3.NotEmpty ())
-		{
 		
-		SetCalibrationIlluminant3 (profileInfo.fCalibrationIlluminant3);
-		
-		SetColorMatrix3 (profileInfo.fColorMatrix3);
-					
-		if (profileInfo.fForwardMatrix3.NotEmpty ())
-			{
-			
-			SetForwardMatrix3 (profileInfo.fForwardMatrix3);
-			
-			}
-		
-		if (profileInfo.fReductionMatrix3.NotEmpty ())
-			{
-			
-			SetReductionMatrix3 (profileInfo.fReductionMatrix3);
-			
-			}
-		
-		if (CalibrationIlluminant3 () == lsOther)
-			{
-
-			SetIlluminantData3 (profileInfo.fIlluminantData3);
-
-			}
-
 		}
 
 	SetProfileCalibrationSignature (profileInfo.fProfileCalibrationSignature.Get ());
 
 	if (profileInfo.fHueSatDeltas1Offset != 0 &&
-		profileInfo.fHueSatDeltas1Count	 != 0)
+		profileInfo.fHueSatDeltas1Count  != 0)
 		{
 
 		TempBigEndian setEndianness (stream, profileInfo.fBigEndian);
 
 		stream.SetReadPosition (profileInfo.fHueSatDeltas1Offset);
 		
-		bool skipSat0 = (profileInfo.fHueSatDeltas1Count ==
-						 SafeUint32Mult (profileInfo.fProfileHues,
-										 SafeUint32Sub (profileInfo.fProfileSats, 1),
-										 profileInfo.fProfileVals, 3));
+		bool skipSat0 = (profileInfo.fHueSatDeltas1Count == SafeUint32Mult(
+														   profileInfo.fProfileHues,
+														   SafeUint32Sub(profileInfo.fProfileSats, 1),
+														   profileInfo.fProfileVals, 3));
 
 		ReadHueSatMap (stream,
 					   fHueSatDeltas1,
@@ -1641,17 +982,17 @@ void dng_camera_profile::Parse (dng_stream &stream,
 		}
 
 	if (profileInfo.fHueSatDeltas2Offset != 0 &&
-		profileInfo.fHueSatDeltas2Count	 != 0)
+		profileInfo.fHueSatDeltas2Count  != 0)
 		{
 
 		TempBigEndian setEndianness (stream, profileInfo.fBigEndian);
 
 		stream.SetReadPosition (profileInfo.fHueSatDeltas2Offset);
 
-		bool skipSat0 = (profileInfo.fHueSatDeltas2Count ==
-						 SafeUint32Mult (profileInfo.fProfileHues,
-										 SafeUint32Sub (profileInfo.fProfileSats, 1),
-										 profileInfo.fProfileVals, 3));
+		bool skipSat0 = (profileInfo.fHueSatDeltas2Count == SafeUint32Mult(
+														   profileInfo.fProfileHues,
+														   SafeUint32Sub(profileInfo.fProfileSats, 1),
+														   profileInfo.fProfileVals, 3));
 
 		ReadHueSatMap (stream,
 					   fHueSatDeltas2,
@@ -1662,39 +1003,18 @@ void dng_camera_profile::Parse (dng_stream &stream,
 
 		}
 
-	if (profileInfo.fHueSatDeltas3Offset != 0 &&
-		profileInfo.fHueSatDeltas3Count	 != 0)
-		{
-
-		TempBigEndian setEndianness (stream, profileInfo.fBigEndian);
-
-		stream.SetReadPosition (profileInfo.fHueSatDeltas3Offset);
-
-		bool skipSat0 = (profileInfo.fHueSatDeltas3Count == profileInfo.fProfileHues *
-														   (profileInfo.fProfileSats - 1) *
-															profileInfo.fProfileVals * 3);
-
-		ReadHueSatMap (stream,
-					   fHueSatDeltas3,
-					   profileInfo.fProfileHues,
-					   profileInfo.fProfileSats,
-					   profileInfo.fProfileVals,
-					   skipSat0);
-
-		}
-
 	if (profileInfo.fLookTableOffset != 0 &&
-		profileInfo.fLookTableCount	 != 0)
+		profileInfo.fLookTableCount  != 0)
 		{
 
 		TempBigEndian setEndianness (stream, profileInfo.fBigEndian);
 
 		stream.SetReadPosition (profileInfo.fLookTableOffset);
 
-		bool skipSat0 = (profileInfo.fLookTableCount ==
-						 SafeUint32Mult (profileInfo.fLookTableHues,
-										 SafeUint32Sub (profileInfo.fLookTableSats, 1),
-										 profileInfo.fLookTableVals, 3));
+		bool skipSat0 = (profileInfo.fLookTableCount == SafeUint32Mult(
+													   profileInfo.fLookTableHues,
+													   SafeUint32Sub(profileInfo.fLookTableSats, 1),
+														 profileInfo.fLookTableVals, 3));
 
 		ReadHueSatMap (stream,
 					   fLookTable,
@@ -1714,11 +1034,6 @@ void dng_camera_profile::Parse (dng_stream &stream,
 
 		uint32 points = profileInfo.fToneCurveCount / 2;
 
-		if (points > kMaxToneCurvePoints)
-			{
-			ThrowProgramError ("Too many tone curve points");
-			}
-
 		fToneCurve.fCoord.resize (points);
 
 		for (size_t i = 0; i < points; i++)
@@ -1735,8 +1050,6 @@ void dng_camera_profile::Parse (dng_stream &stream,
 			
 		}
 
-	SetToneMethod (profileInfo.fToneMethod);
-		
 	SetHueSatMapEncoding (profileInfo.fHueSatMapEncoding);
 		
 	SetLookTableEncoding (profileInfo.fLookTableEncoding);
@@ -1744,14 +1057,6 @@ void dng_camera_profile::Parse (dng_stream &stream,
 	SetBaselineExposureOffset (profileInfo.fBaselineExposureOffset.As_real64 ());
 
 	SetDefaultBlackRender (profileInfo.fDefaultBlackRender);
-
-	SetProfileGainTableMap (profileInfo.fProfileGainTableMap);
-
-	SetGroupName (profileInfo.fProfileGroupName);
-
-	SetDynamicRangeInfo (profileInfo.fProfileDynamicRange);
-
-	SetMaskedRGBTables (profileInfo.fMaskedRGBTables);
 		
 	}
 		
@@ -1833,30 +1138,11 @@ void dng_camera_profile::SetFourColorBayer ()
 		
 		}
 			
-	if (fColorMatrix3.NotEmpty ())
-		{
-		
-		dng_matrix m (4, 3);
-		
-		for (j = 0; j < 3; j++)
-			{
-			m [0] [j] = fColorMatrix3 [0] [j];
-			m [1] [j] = fColorMatrix3 [1] [j];
-			m [2] [j] = fColorMatrix3 [2] [j];
-			m [3] [j] = fColorMatrix3 [1] [j];
-			}
-			
-		fColorMatrix3 = m;
-		
-		}
-			
 	fReductionMatrix1.Clear ();
 	fReductionMatrix2.Clear ();
-	fReductionMatrix3.Clear ();
 	
 	fForwardMatrix1.Clear ();
 	fForwardMatrix2.Clear ();
-	fForwardMatrix3.Clear ();
 	
 	}
 
@@ -1876,135 +1162,71 @@ dng_hue_sat_map * dng_camera_profile::HueSatMapForWhite (const dng_xy_coord &whi
 			return new dng_hue_sat_map (fHueSatDeltas1);
 			
 			}
-
-		// We have table 1 and table 2.
-
-		if (IlluminantModel () == 3)
-			{
-
-			// This means we also have a 3rd hue sat map, since all
-			// three are required to be present or absent for a
-			// triple-illuminant profile.
 			
-			return HueSatMapForWhite_Triple (white);
+		// Else we need to interpolate based on color temperature.
+		
+		real64 temperature1 = CalibrationTemperature1 ();
+		real64 temperature2 = CalibrationTemperature2 ();
+		
+		if (temperature1 <= 0.0 ||
+			temperature2 <= 0.0 ||
+			temperature1 == temperature2)
+			{
+			
+			return new dng_hue_sat_map (fHueSatDeltas1);
 			
 			}
+			
+		bool reverseOrder = temperature1 > temperature2;
+		
+		if (reverseOrder)
+			{
+			real64 temp  = temperature1;
+			temperature1 = temperature2;
+			temperature2 = temp;
+			}
 
+		// Convert to temperature/offset space.
+		
+		dng_temperature td (white);
+		
+		// Find fraction to weight the first calibration.
+		
+		real64 g;
+		
+		if (td.Temperature () <= temperature1)
+			g = 1.0;
+		
+		else if (td.Temperature () >= temperature2)
+			g = 0.0;
+		
 		else
 			{
-
-			// Dual-illuminant model.
 			
-			return HueSatMapForWhite_Dual (white);
+			real64 invT = 1.0 / td.Temperature ();
 			
-			}
-
-		}
-
-	return nullptr;
-
-	}
-
-/*****************************************************************************/
-
-dng_hue_sat_map *
-	dng_camera_profile::HueSatMapForWhite_Dual (const dng_xy_coord &white) const
-	{
-
-	DNG_REQUIRE (fHueSatDeltas1.IsValid () &&
-				 fHueSatDeltas2.IsValid (),
-				 "Bad hue sat map deltas 1 or 2");
-				 
-	// Interpolate based on color temperature.
-		
-	real64 temperature1 = CalibrationTemperature1 ();
-	real64 temperature2 = CalibrationTemperature2 ();
-		
-	if (temperature1 <= 0.0 ||
-		temperature2 <= 0.0 ||
-		temperature1 == temperature2)
-		{
-			
-		return new dng_hue_sat_map (fHueSatDeltas1);
-			
-		}
-			
-	bool reverseOrder = temperature1 > temperature2;
-		
-	if (reverseOrder)
-		{
-		real64 temp	 = temperature1;
-		temperature1 = temperature2;
-		temperature2 = temp;
-		}
-
-	// Convert to temperature/offset space.
-		
-	dng_temperature td (white);
-		
-	// Find fraction to weight the first calibration.
-		
-	real64 g;
-		
-	if (td.Temperature () <= temperature1)
-		g = 1.0;
-		
-	else if (td.Temperature () >= temperature2)
-		g = 0.0;
-		
-	else
-		{
-			
-		real64 invT = 1.0 / td.Temperature ();
-			
-		g = (invT				  - (1.0 / temperature2)) /
-			((1.0 / temperature1) - (1.0 / temperature2));
+			g = (invT                 - (1.0 / temperature2)) /
+				((1.0 / temperature1) - (1.0 / temperature2));
 				
-		}
+			}
 			
-	// Fix up if we swapped the order.
+		// Fix up if we swapped the order.
 		
-	if (reverseOrder)
-		{
-		g = 1.0 - g;
+		if (reverseOrder)
+			{
+			g = 1.0 - g;
+			}
+		
+		// Do the interpolation.
+		
+		return dng_hue_sat_map::Interpolate (HueSatDeltas1 (),
+											 HueSatDeltas2 (),
+											 g);
+		
 		}
 		
-	// Do the interpolation.
-		
-	return dng_hue_sat_map::Interpolate (HueSatDeltas1 (),
-										 HueSatDeltas2 (),
-										 g);
-		
-	}
+	return NULL;
 
-/*****************************************************************************/
-
-dng_hue_sat_map *
-	dng_camera_profile::HueSatMapForWhite_Triple (const dng_xy_coord &white) const
-	{
-
-	DNG_REQUIRE (fHueSatDeltas1.IsValid () &&
-				 fHueSatDeltas2.IsValid () &&
-				 fHueSatDeltas3.IsValid (),
-				 "Bad hue sat map deltas 1 or 2 or 3");
-
-	real64 w1, w2, w3;
-	
-	CalculateTripleIlluminantWeights
-		(white,
-		 dng_illuminant_data (CalibrationIlluminant1 (), &IlluminantData1 ()),
-		 dng_illuminant_data (CalibrationIlluminant2 (), &IlluminantData2 ()),
-		 dng_illuminant_data (CalibrationIlluminant3 (), &IlluminantData3 ()),
-		 w1,
-		 w2,
-		 w3);
-
-	return dng_hue_sat_map::Interpolate (HueSatDeltas1 (),
-										 HueSatDeltas2 (),
-										 HueSatDeltas3 (),
-										 w1,
-										 w2);
-		 
 	}
 
 /*****************************************************************************/
@@ -2013,255 +1235,17 @@ void dng_camera_profile::Stub ()
 	{
 	
 	(void) Fingerprint ();
- 
-	(void) RenderDataFingerprint ();
 	
 	dng_hue_sat_map nullTable;
 	
 	fHueSatDeltas1 = nullTable;
 	fHueSatDeltas2 = nullTable;
-	fHueSatDeltas3 = nullTable;
 	
 	fLookTable = nullTable;
 	
 	fToneCurve.SetInvalid ();
 	
 	fWasStubbed = true;
-	
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile::HasProfileGainTableMap () const
-	{
-	
-	return fProfileGainTableMap != nullptr;
-	
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetProfileGainTableMap
-			(const std::shared_ptr<const dng_gain_table_map> &gainTableMap)
-	{
-	
-	fProfileGainTableMap = gainTableMap;
-	
-	}
-
-/*****************************************************************************/
-
-const dng_camera_profile_dynamic_range & dng_camera_profile::DynamicRangeInfo () const
-	{
-	
-	if (fDynamicRangeInfo)
-		return *fDynamicRangeInfo;
-	
-	static const dng_camera_profile_dynamic_range sNoInfo;
-
-	return sNoInfo;
-	
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile::IsSDR () const
-	{
-	
-	return !IsHDR ();
-	
-	}
-		
-/*****************************************************************************/
-
-bool dng_camera_profile::IsHDR () const
-	{
-	
-	return DynamicRangeInfo ().IsHDR ();
-	
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetDynamicRangeInfo (const dng_camera_profile_dynamic_range &info)
-	{
-	
-	fDynamicRangeInfo.reset (new dng_camera_profile_dynamic_range (info));
-
-	ClearFingerprint ();
-	
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile::HasMaskedRGBTables () const
-	{
-	
-	return fMaskedRGBTables != nullptr;
-	
-	}
-
-/*****************************************************************************/
-
-const dng_masked_rgb_tables & dng_camera_profile::MaskedRGBTables () const
-	{
-	
-	DNG_REQUIRE (HasMaskedRGBTables (), "Missing masked RGBTables");
-
-	return *fMaskedRGBTables;
-	
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetMaskedRGBTables
-	(const std::shared_ptr<const dng_masked_rgb_tables> &maskedRGBTables)
-	{
-	
-	fMaskedRGBTables = maskedRGBTables;
-	
-	}
-
-/*****************************************************************************/
-
-void dng_camera_profile::SetMaskedRGBTables
-	(AutoPtr<dng_masked_rgb_tables> &maskedRGBTables)
-	{
-	
-	fMaskedRGBTables.reset (maskedRGBTables.Release ());
-	
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile::Uses_1_6_Features () const
-	{
-
-	// If we require a DNG 1.6 reader, then we're obviously using 1.6 features.
-
-	if (Requires_1_6_Reader ())
-		{
-		return true;
-		}
-
-	// Is this a triple-illuminant model?
-
-	if (IlluminantModel () == 3)
-		{
-		return true;
-		}
-
-	// Don't bother checking the individual tags like ForwardMatrix3. If we
-	// consider it a triple-illuminant profile, then we'll already have returned
-	// true -- see above. If we don't, then the extra tags don't matter.
-
-	return false;
-	
-	}
-
-/******************************************************************************/
-
-bool dng_camera_profile::Requires_1_6_Reader () const
-	{
-	
-	// The only change in DNG 1.6 that breaks compatibility with older readers
-	// is the ability to specify custom data for illuminants 1 and 2.
-	
-	if (CalibrationIlluminant1 () == lsOther &&
-		IlluminantData1 ().WhiteXY ().IsValid ())
-		{
-		return true;
-		}
-	
-	if (CalibrationIlluminant2 () == lsOther &&
-		IlluminantData2 ().WhiteXY ().IsValid ())
-		{
-		return true;
-		}
-
-	return false;
-
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile::Uses_1_7_Features () const
-	{
-
-	// Do we have a ProfileGainTableMap?
-
-	if (HasProfileGainTableMap ())
-		return true;
-
-	// Do we have RGBTables?
-
-	if (HasMaskedRGBTables ())
-		return true;
-
-	// Is this a HDR profile?
-
-	if (DynamicRangeInfo ().IsValid () &&
-		DynamicRangeInfo ().IsHDR ())
-		return true;
-
-	return false;
-	
-	}
-
-/******************************************************************************/
-
-dng_camera_profile_metadata::dng_camera_profile_metadata
-							 (const dng_camera_profile &profile,
-							  int32 index)
-
-	:	fProfileID (profile.ProfileID ())
-	
-	,	fGroupName (profile.GroupName ())
-	
-	,	fHDR (profile.DynamicRangeInfo ().IsHDR ())
-
-	,	fRenderDataFingerprint (profile.RenderDataFingerprint ())
-	
-	,	fIsLegalToEmbed (profile.IsLegalToEmbed ())
-	
-	,	fWasReadFromDNG (profile.WasReadFromDNG ())
-	
-	,	fWasReadFromDisk (profile.WasReadFromDisk ())
-	
-	,	fUniqueID ()
-
-	,	fFilePath ()
-
-	,	fReadOnly (true)
-
-	,	fIndex (index)
-	
-	{
-	
-	if (fWasReadFromDisk)
-		{
-		fUniqueID = profile.UniqueID ();
-		}
-	
-	}
-
-/*****************************************************************************/
-
-bool dng_camera_profile_metadata::operator==
-		(const dng_camera_profile_metadata &metadata) const
-	{
-	
-	return fProfileID			  == metadata.fProfileID			 &&
-		   fGroupName			  == metadata.fGroupName			 &&
-		   fHDR					  == metadata.fHDR					 &&
-		   fRenderDataFingerprint == metadata.fRenderDataFingerprint &&
-		   fIsLegalToEmbed		  == metadata.fIsLegalToEmbed		 &&
-		   fWasReadFromDNG		  == metadata.fWasReadFromDNG		 &&
-		   fWasReadFromDisk		  == metadata.fWasReadFromDisk		 &&
-		   fUniqueID			  == metadata.fUniqueID				 &&
-		   fFilePath			  == metadata.fFilePath				 &&
-		   fReadOnly			  == metadata.fReadOnly				 &&
-		   fIndex				  == metadata.fIndex;
 	
 	}
 
@@ -2277,24 +1261,6 @@ void SplitCameraProfileName (const dng_string &name,
 	version = 0;
 	
 	uint32 len = baseName.Length ();
-
-	if (len == 7 && baseName.StartsWith ("ACR ", true))
-		{
-
-		if (name.Get () [len - 3] >= '0' &&
-			name.Get () [len - 3] <= '9' &&
-			name.Get () [len - 2] == '.' &&
-			name.Get () [len - 1] >= '0' &&
-			name.Get () [len - 1] <= '9')
-		
-		baseName.Truncate (3);
-
-		version = ((int32) (name.Get () [len - 3] - '0')) * 10 +
-				  ((int32) (name.Get () [len - 1] - '0'));
-
-		return;
-
-		}
 	
 	if (len > 5 && baseName.EndsWith (" beta"))
 		{

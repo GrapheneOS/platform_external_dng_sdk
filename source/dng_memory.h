@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_memory.h#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
 
 /** Support for memory allocation.
  */
@@ -18,21 +23,11 @@
 
 #include "dng_classes.h"
 #include "dng_exceptions.h"
-#include "dng_flags.h"
 #include "dng_safe_arithmetic.h"
 #include "dng_types.h"
-#include "dng_uncopyable.h"
 
 #include <cstdlib>
 #include <vector>
-
-/*****************************************************************************/
-
-#if qDNGAVXSupport
-	#define DNG_ALIGN_SIMD(x) ((((uintptr) (x)) + 31) & ~((uintptr) 31))
-#else
-	#define DNG_ALIGN_SIMD(x) ((((uintptr) (x)) + 15) & ~((uintptr) 15))
-#endif
 
 /*****************************************************************************/
 
@@ -41,7 +36,7 @@
 ///
 /// This class does not use dng_memory_allocator for memory allocation.
 
-class dng_memory_data: private dng_uncopyable
+class dng_memory_data
 	{
 	
 	private:
@@ -61,8 +56,6 @@ class dng_memory_data: private dng_uncopyable
 
 		dng_memory_data (uint32 size);
 		
-		dng_memory_data (const dng_safe_uint32 &size);
-		
 		/// Note: This constructor is for internal use only and should not be
 		/// considered part of the DNG SDK API.
 		///
@@ -70,9 +63,7 @@ class dng_memory_data: private dng_uncopyable
 		/// \param count Number of elements.
 		/// \param elementSize Size of each element.
 		/// \exception dng_memory_full with fErrorCode equal to dng_error_memory.
-
-		dng_memory_data (uint32 count, 
-						 std::size_t elementSize);
+		dng_memory_data (uint32 count, std::size_t elementSize);
 
 		/// Release memory buffer using free.
 
@@ -84,8 +75,6 @@ class dng_memory_data: private dng_uncopyable
 
 		void Allocate (uint32 size);
 
-		void Allocate (const dng_safe_uint32 &size);
-
 		/// Note: This method is for internal use only and should not be
 		/// considered part of the DNG SDK API.
 		///
@@ -94,12 +83,7 @@ class dng_memory_data: private dng_uncopyable
 		/// \param count Number of elements.
 		/// \param elementSize Size of each element.
 		/// \exception dng_memory_full with fErrorCode equal to dng_error_memory.
-
-		void Allocate (uint32 count, 
-					   std::size_t elementSize);
-
-		void Allocate (const dng_safe_uint32 &count, 
-					   std::size_t elementSize);
+		void Allocate (uint32 count, std::size_t elementSize);
 
 		/// Release any allocated memory using free. Object is still valid and
 		/// Allocate can be called again.
@@ -282,6 +266,14 @@ class dng_memory_data: private dng_uncopyable
 			return (const real64 *) Buffer ();
 			}
 			
+	private:
+	
+		// Hidden copy constructor and assignment operator.
+	
+		dng_memory_data (const dng_memory_data &data);
+		
+		dng_memory_data & operator= (const dng_memory_data &data);
+
 	};
 	
 /*****************************************************************************/
@@ -291,7 +283,7 @@ class dng_memory_data: private dng_uncopyable
 ///
 /// This class requires a dng_memory_allocator for allocation.
 
-class dng_memory_block: private dng_uncopyable
+class dng_memory_block
 	{
 	
 	private:
@@ -311,41 +303,37 @@ class dng_memory_block: private dng_uncopyable
 		uint32 PhysicalSize ()
 			{
 			
-			// This size is padded for TWO reasons! The first is allow
-			// alignment to 16-byte boundaries if the allocator does not do
-			// that already. The second, which is very important, so to
-			// provide safe overread areas for SSE2-type bottlenecks, which
-			// can often be written faster by allowing them to reading
-			// slightly block. Someone on the image core them did not
-			// understand this and removed this padding. I'm undoing this
-			// removal and restoring this padding, since removing it might
-			// lead to memory access crashes in some cases.
-			// 
-			// Please do NOT change the following padding unless you are very
-			// sure what you are doing.
+			// This size is padded for TWO reasons!  The first is allow alignment
+			// to 16-byte boundaries if the allocator does not do that already.  The
+			// second, which is very important, so to provide safe overread areas for
+			// SSE2-type bottlenecks, which can often be written faster by allowing them
+			// to reading slightly block.  Someone on the image core them did not
+			// understand this and removed this padding.  I'm undoing this removal
+			// and restoring this padding, since removing it might lead to memory
+			// access crashes in some cases.
 
-			dng_safe_uint32 safeLogicalSize (fLogicalSize);
-
-			#if qDNGAVXSupport
-
-			// Allow 32-byte alignment + 64-byte overread in both directions:
-			// 32 + 64 + 64 = 160.
-
-			return (safeLogicalSize + 160u).Get ();
-
-			#else
-
-			// Allow 16-byte alignment + overread.
-
-			return (safeLogicalSize + 64u).Get ();
-
-			#endif	// qDNGAVXSupport
-
+			// This padding is throwing off all of our allocations (f.e. dng_string, pixel buffers, etc)
+			//  that uses dng_memory_block on iOS/Android that is memory limited.  Imagecore carefully
+			//  allocates pow2 tile buffers, but this bumps us to the next ssd block (+4K).  
+			// This also makes it difficult to identify memory reports in Instruments since all 
+			//  numbers are off by 64.  Imagecore never crashed from the removal of the padding.  
+			// The allocator on Win64/Mac64 is 16-byte aligned already. iOS is too.  
+			//  Linux is 8 byte, but it's using mem_align.  
+			// We should fix the SIMD routines and revisit removing this padding - Alec.
+			
+			uint32 result;
+			if (!SafeUint32Add(fLogicalSize, 64u, &result))
+				{
+				ThrowMemoryFull("Arithmetic overflow in PhysicalSize()");
+				}
+			
+			return result;
+			
 			}
 		
 		void SetBuffer (void *p)
 			{
-			fBuffer = (char *) DNG_ALIGN_SIMD (p);
+			fBuffer = (char *) ((((uintptr) p) + 15) & ~((uintptr) 15));
 			}
 		
 	public:
@@ -508,6 +496,14 @@ class dng_memory_block: private dng_uncopyable
 			return (const real64 *) Buffer ();
 			}
 
+	private:
+	
+		// Hidden copy constructor and assignment operator.
+	
+		dng_memory_block (const dng_memory_block &data);
+		
+		dng_memory_block & operator= (const dng_memory_block &data);
+
 	};
 
 /*****************************************************************************/
@@ -529,40 +525,9 @@ class dng_memory_allocator
 		/// \exception dng_exception with fErrorCode equal to dng_error_memory.
 
 		virtual dng_memory_block * Allocate (uint32 size);
-
-		/// Directly allocate a block of at least 'size' bytes.
-		/// \param size Number of bytes in memory block.
-		/// \retval A pointer to a contiguous block of memory with at least
-		/// size bytes of valid storage.
-		/// Caller is responsible for freeing the memory with Free.
-		/// Default implementation uses standard library 'malloc' routine.
-
-		virtual void * Malloc (size_t size);
-
-		/// Free the specified block of memory previously allocated with Malloc.
-		/// Default implementation uses standard library 'free' routine.
-	
-		virtual void Free (void *ptr);
 	
 	};
 
-/*****************************************************************************/
-
-class dng_malloc_block : public dng_memory_block
-	{
-	
-	private:
-	
-		void *fMalloc;
-	
-	public:
-	
-		dng_malloc_block (uint32 logicalSize);
-		
-		virtual ~dng_malloc_block ();
-		
-	};
-	
 /*****************************************************************************/
 
 /// \brief Default memory allocator used if NULL is passed in for allocator 
@@ -575,75 +540,52 @@ extern dng_memory_allocator gDefaultDNGMemoryAllocator;
 
 /*****************************************************************************/
 
-/// \brief C++ allocator (i.e. an implementation of the Allocator concept)
-/// that throws a dng_exception with error code dng_error_memory if it cannot
-/// allocate memory.
-
+// C++ allocator (i.e. an implementation of the Allocator concept) that throws a
+// dng_exception with error code dng_error_memory if it cannot allocate memory.
 template <typename T>
 class dng_std_allocator
 	{
 	
 	public:
-
 		typedef T value_type;
 		
-		#if defined(_MSC_VER) && _MSC_VER >= 1900
-
-		// Default implementations of default constructor and copy
-		// constructor.
-
+		// Default implementations of default constructor and copy constructor.
 		dng_std_allocator () = default;
-
-		// dng_std_allocator (const dng_std_allocator &) = default;
-
-		template<class U> dng_std_allocator (const dng_std_allocator<U> &) {}
+		dng_std_allocator (const dng_std_allocator&) = default;
+		template<typename U> dng_std_allocator (const dng_std_allocator<U>&) {}
 		
-		#endif
-
-		T * allocate (size_t n)
+		T* allocate (size_t n)
 			{
-			const size_t size = SafeSizetMult (n, sizeof (T));
+			const size_t size = SafeSizetMult(n, sizeof (T));
 			T *retval = static_cast<T *> (malloc (size));
-			if (!retval) 
-				{
+			if (!retval) {
 				ThrowMemoryFull ();
-				}
+			}
 			return retval;
 			}
 		
-		void deallocate (T *ptr, 
-						 size_t /* n */)
+		void deallocate (T *ptr, size_t n)
 			{
 			free (ptr);
 			}
-
-	};
+};
 
 template <class T>
-bool operator== (const dng_std_allocator<T> & /* a1 */,
-				 const dng_std_allocator<T> & /* a2 */)
+bool operator== (const dng_std_allocator<T> &a1,
+				 const dng_std_allocator<T> &a2)
 	{
 	return true;
 	}
 
 template <class T>
-bool operator!= (const dng_std_allocator<T> & /* a1 */,
-				 const dng_std_allocator<T> & /* a2 */)
+bool operator!= (const dng_std_allocator<T> &a1,
+				 const dng_std_allocator<T> &a2)
 	{
 	return false;
 	}
 
-/*****************************************************************************/
-
 // std::vector specialized to use dng_std_allocator for allocation.
-
-#if 0
-// original implementation without using custom allocator
-#define dng_std_vector std::vector
-#else
-// preferred implementation using custom allocator, requires C++11 
 template <class T> using dng_std_vector = std::vector<T, dng_std_allocator<T> >;
-#endif
 
 /*****************************************************************************/
 

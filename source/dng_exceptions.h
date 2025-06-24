@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_exceptions.h#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
 
 /** \file
  * C++ exception support for DNG SDK.
@@ -22,20 +27,10 @@
 
 /*****************************************************************************/
 
-#ifndef DNG_NO_RETURN
-#ifdef __GNUC__
-#define DNG_NO_RETURN __attribute__((noreturn))
-#else
-#define DNG_NO_RETURN
-#endif
-#endif
-
-/*****************************************************************************/
-
 /// Display a warning message. Note that this may just eat the message.
 
 void ReportWarning (const char *message,
-					const char *sub_message = NULL);
+				    const char *sub_message = NULL);
 	
 /*****************************************************************************/
 
@@ -88,7 +83,7 @@ class dng_exception
 void Throw_dng_error (dng_error_code err,
 					  const char * message = NULL,
 					  const char * sub_message = NULL,
-					  bool silent = false) DNG_NO_RETURN;
+					  bool silent = false);
 
 /******************************************************************************/
 
@@ -116,18 +111,6 @@ inline void ThrowProgramError (const char * sub_message = NULL)
 	{
 	
 	Throw_dng_error (dng_error_unknown, NULL, sub_message);
-	
-	}
-
-/*****************************************************************************/
-
-/// \brief Convenience function to throw dng_exception with error code
-/// dng_error_overflow.
-
-inline void ThrowOverflow (const char * sub_message = NULL)
-	{
-	
-	Throw_dng_error (dng_error_overflow, NULL, sub_message);
 	
 	}
 
@@ -172,11 +155,10 @@ inline void ThrowUserCanceled ()
 /// \brief Convenience function to throw dng_exception with error code
 /// dng_error_host_insufficient .
 
-inline void ThrowHostInsufficient (const char * sub_message = NULL,
-								   bool silent = false)
+inline void ThrowHostInsufficient (const char * sub_message = NULL)
 	{
 	
-	Throw_dng_error (dng_error_host_insufficient, NULL, sub_message, silent);
+	Throw_dng_error (dng_error_host_insufficient, NULL, sub_message);
 	
 	}
 

@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_assertions.h#3 $ */ 
+/* $DateTime: 2012/09/05 12:31:51 $ */
+/* $Change: 847652 $ */
+/* $Author: tknoll $ */
 
 /** \file
  * Conditionally compiled assertion check support.
@@ -20,34 +25,9 @@
 #include "dng_exceptions.h"
 #include "dng_flags.h"
 
-
 /*****************************************************************************/
 
-#if qWinOS
-
-/// Windows-only function to emit a message to the Debugger Output pane
-/// if a debug session is in progress.
-/// \param s C string to emit.
-/// \param nl Optional newline (or suffix) C string to be emitted after s.
-
-void dng_outputdebugstring (const char *s,
-							const char *nl = NULL);
-
-#endif
-
-/*****************************************************************************/
-
-#if defined(__EMSCRIPTEN__)
-
-/// Emscripten-only function to emit a message to the debugger console
-/// if a debug session is in progress.
-
-void dng_emscripten_log (int emLogType,
-						 const char *s);
-
-#endif
-
-/*****************************************************************************/
+#if qDNGDebug
 
 /// Platform-specific function to display an assert.
 
@@ -56,6 +36,8 @@ void dng_show_message (const char *s);
 /// Show a formatted error message.
 
 void dng_show_message_f (const char *fmt, ...);
+
+#endif
 
 /*****************************************************************************/
 
@@ -77,7 +59,7 @@ void dng_show_message_f (const char *fmt, ...);
 /// \param x Predicate which must be true.
 /// \param y String to display if x is not true.
 
-#define DNG_ASSERT(x,y)
+#define DNG_ASSERT(x,y) do { } while(false)
 
 #endif
 #endif

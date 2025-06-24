@@ -1,9 +1,16 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
+/*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_spline.cpp#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
+
 /*****************************************************************************/
 
 #include "dng_spline.h"
@@ -63,12 +70,12 @@ void dng_spline_solver::Solve ()
 	
 	int32 count = (int32) X.size ();
 	
-	DNG_REQUIRE (count >= 2, "Too few points");
+	DNG_ASSERT (count >= 2, "Too few points");
 	
 	int32 start = 0;
-	int32 end	= count;
+	int32 end   = count;
 	
-	real64 A =	X [start+1] - X [start];
+	real64 A =  X [start+1] - X [start];
 	real64 B = (Y [start+1] - Y [start]) / A;
 	
 	S.resize (count);
@@ -78,7 +85,7 @@ void dng_spline_solver::Solve ()
 	int32 j;
 
 	// Slopes here are a weighted average of the slopes
-	// to each of the adjacent control points.
+	// to each of the adjcent control points.
 
 	for (j = start + 2; j < end; ++j)
 		{
@@ -170,14 +177,12 @@ real64 dng_spline_solver::Evaluate (real64 x) const
 	int32 count = (int32) X.size ();
 	
 	// Check for off each end of point list.
-
+	
 	if (x <= X [0])
-		return fUseSlopeExtensionLo ? (Y [0] + EvaluateSlope (X [0]) * (x - X [0]))
-									:  Y [0];
+		return Y [0];
 
 	if (x >= X [count-1])
-		return fUseSlopeExtensionHi ? (Y [count-1] + EvaluateSlope (X [count-1]) * (x - X [count-1]))
-									:  Y [count-1];
+		return Y [count-1];
 
 	// Binary search for the index.
 	
@@ -219,72 +224,9 @@ real64 dng_spline_solver::Evaluate (real64 x) const
 								  X [j - 1],
 								  Y [j - 1],
 								  S [j - 1],
-								  X [j	  ],
-								  Y [j	  ],
-								  S [j	  ]);
-
-	}
-
-/*****************************************************************************/
-
-real64 dng_spline_solver::EvaluateSlope (real64 x) const
-	{
-
-	int32 count = (int32) X.size ();
-	
-	int32 lower = 1;
-	int32 upper = count - 1;
-	
-	// Check for off each end of point list.
-
-	if (x <= X [0])
-		{
-		x = X [0];
-		lower = 1;
-		}
-
-	else if (x >= X [count-1])
-		{
-		x = X [count-1];
-		lower = upper;
-		}
-
-	else
-		{
-
-		// Binary search for the index.
-
-		while (upper > lower)
-			{
-
-			int32 mid = (lower + upper) >> 1;
-
-			if (x == X [mid])
-				{
-				return Y [mid];
-				}
-
-			if (x > X [mid])
-				lower = mid + 1;
-			else
-				upper = mid;
-
-			}
-
-		DNG_ASSERT (upper == lower,
-					"Binary search error in point list");
-
-		}
-		
-	int32 j = lower;
-		
-	return EvaluateSlopeSplineSegment (x,
-									   X [j - 1],
-									   Y [j - 1],
-									   S [j - 1],
-									   X [j	  ],
-									   Y [j	  ],
-									   S [j	  ]);
+								  X [j    ],
+								  Y [j    ],
+								  S [j    ]);
 
 	}
 		

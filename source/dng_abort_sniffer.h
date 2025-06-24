@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2008 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_abort_sniffer.h#2 $ */ 
+/* $DateTime: 2012/07/11 10:36:56 $ */
+/* $Change: 838485 $ */
+/* $Author: tknoll $ */
 
 /** \file
  * Classes supporting user cancellation and progress tracking.
@@ -17,11 +22,8 @@
 
 /*****************************************************************************/
 
-#include "dng_classes.h"
 #include "dng_flags.h"
-#include "dng_string.h"
 #include "dng_types.h"
-#include "dng_uncopyable.h"
 
 /*****************************************************************************/
 
@@ -30,16 +32,14 @@
 enum dng_priority
 	{
 	
-	dng_priority_background = 0,
-	dng_priority_low		= 1,
-	dng_priority_medium		= 2,
-	dng_priority_high		= 3,
-	dng_priority_very_high	= 4,
+	dng_priority_low,
+	dng_priority_medium,
+	dng_priority_high,
 	
 	dng_priority_count,
 	
-	dng_priority_minimum = dng_priority_background,
-	dng_priority_maximum = dng_priority_very_high
+	dng_priority_minimum = dng_priority_low,
+	dng_priority_maximum = dng_priority_high
 	
 	};
 
@@ -53,13 +53,10 @@ class dng_set_minimum_priority
 	private:
 	
 		dng_priority fPriority;
-
-		dng_string fName;
 	
 	public:
 	
-		dng_set_minimum_priority (dng_priority priority,
-								  const char *name);
+		dng_set_minimum_priority (dng_priority priority);
 		
 		~dng_set_minimum_priority ();
 	
@@ -81,7 +78,7 @@ class dng_abort_sniffer
 	private:
 	
 		dng_priority fPriority;
-
+	
 	public:
 	
 		dng_abort_sniffer ();
@@ -97,7 +94,10 @@ class dng_abort_sniffer
 			
 		/// Setter for priority level.
 		
-		void SetPriority (dng_priority priority);
+		void SetPriority (dng_priority priority)
+			{
+			fPriority = priority;
+			}
 
 		/// Check for pending user cancellation or other abort. ThrowUserCanceled 
 		/// will be called if one is pending. This static method is provided as a
@@ -124,21 +124,6 @@ class dng_abort_sniffer
 			return false;
 			}
 
-		// Specifies whether or not this sniffer may participate in
-		// priority-based waiting (sleep the current thread on which
-		// SniffForAbort is called, if another thread has higher priority).
-		// Default result is false. Subclass must override to return true.
-		
-		virtual bool SupportsPriorityWait () const;
-
-		// Recommended time (in seconds) to wait between sniffs.
-		// Default is 0.1 (i.e., 100 ms). Subclass can override to change this.
-
-		virtual real64 SuggestedTimeBetweenSniffs () const
-			{
-			return 0.1;
-			}
-
 	protected:
 	
 		/// Should be implemented by derived classes to check for an user
@@ -146,7 +131,7 @@ class dng_abort_sniffer
 
 		virtual void Sniff () = 0;
 		
-		/// Signals the start of a named task with processing in the DNG SDK.
+		/// Signals the start of a named task withn processing in the DNG SDK.
 		/// Tasks may be nested.
 		/// \param name of the task
 		/// \param fract Percentage of total processing this task is expected to
@@ -164,7 +149,7 @@ class dng_abort_sniffer
 		/// From 0.0 to 1.0 .
 
 		virtual void UpdateProgress (real64 fract);
-
+			
 	};
 
 /******************************************************************************/
@@ -173,7 +158,7 @@ class dng_abort_sniffer
 ///
 /// Instances of this class are intended to be stack allocated.
 
-class dng_sniffer_task: private dng_uncopyable
+class dng_sniffer_task
 	{
 	
 	private:
@@ -185,13 +170,13 @@ class dng_sniffer_task: private dng_uncopyable
 		/// Inform a sniffer of a subtask in DNG processing.
 		/// \param sniffer The sniffer associated with the host on which this
 		/// processing is occurring.
-		/// \param name The name of this subtask as a NULL terminated string.
+		/// \param name The name of this subtask as a NUL terminated string.
 		/// \param fract Percentage of total processing this task is expected
 		/// to take, from 0.0 to 1.0 . 
 
 		dng_sniffer_task (dng_abort_sniffer *sniffer,
-						  const char *name = NULL,
-						  real64 fract = 0.0)
+					      const char *name = NULL,
+					      real64 fract = 0.0)
 					 
 			:	fSniffer (sniffer)
 			
@@ -242,6 +227,14 @@ class dng_sniffer_task: private dng_uncopyable
 			UpdateProgress (1.0);
 			}
 			
+	private:
+	
+		// Hidden copy constructor and assignment operator.
+	
+		dng_sniffer_task (const dng_sniffer_task &task);
+		
+		dng_sniffer_task & operator= (const dng_sniffer_task &task);
+		
 	};
 
 /*****************************************************************************/

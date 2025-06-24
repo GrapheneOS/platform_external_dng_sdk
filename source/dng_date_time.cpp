@@ -1,15 +1,21 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2008 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
+/*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_date_time.cpp#2 $ */ 
+/* $DateTime: 2012/06/01 07:28:57 $ */
+/* $Change: 832715 $ */
+/* $Author: tknoll $ */
+
 /*****************************************************************************/
 
 #include "dng_date_time.h"
 
 #include "dng_exceptions.h"
-#include "dng_globals.h"
 #include "dng_mutex.h"
 #include "dng_stream.h"
 #include "dng_string.h"
@@ -32,12 +38,19 @@
 
 /******************************************************************************/
 
+// MWG says don't use fake time zones in XMP, but there is some
+// old software that requires them to work correctly.
+
+bool gDNGUseFakeTimeZonesInXMP = false;
+
+/******************************************************************************/
+
 dng_date_time::dng_date_time ()
 
-	:	fYear	(0)
-	,	fMonth	(0)
-	,	fDay	(0)
-	,	fHour	(0)
+	:	fYear   (0)
+	,	fMonth  (0)
+	,	fDay    (0)
+	,	fHour   (0)
 	,	fMinute (0)
 	,	fSecond (0)
 	
@@ -48,16 +61,16 @@ dng_date_time::dng_date_time ()
 /******************************************************************************/
 
 dng_date_time::dng_date_time (uint32 year,
-							  uint32 month,
-							  uint32 day,
-							  uint32 hour,
-							  uint32 minute,
-							  uint32 second)
+					  		  uint32 month,
+					  		  uint32 day,
+					  		  uint32 hour,
+					  		  uint32 minute,
+					  		  uint32 second)
 
-	:	fYear	(year)
-	,	fMonth	(month)
-	,	fDay	(day)
-	,	fHour	(hour)
+	:	fYear   (year)
+	,	fMonth  (month)
+	,	fDay    (day)
+	,	fHour   (hour)
 	,	fMinute (minute)
 	,	fSecond (second)
 	
@@ -72,7 +85,7 @@ bool dng_date_time::IsValid () const
 	
 	return fYear   >= 1 && fYear   <= 9999 &&
 		   fMonth  >= 1 && fMonth  <= 12   &&
-		   fDay	   >= 1 && fDay	   <= 31   &&
+		   fDay    >= 1 && fDay    <= 31   &&
 		   fHour   <= 23   &&
 		   fMinute <= 59   &&
 		   fSecond <= 59;
@@ -100,8 +113,8 @@ static uint32 DateTimeParseU32 (const char *&s)
 		
 	while (*s >= '0' && *s <= '9')
 		{
-		x = SafeUint32Mult (x, 10);
-		x = SafeUint32Add (x, (uint32) (*(s++) - '0'));
+		x = SafeUint32Mult(x, 10);
+		x = SafeUint32Add(x, (uint32) (*(s++) - '0'));
 		}
 		
 	return x;
@@ -113,10 +126,10 @@ static uint32 DateTimeParseU32 (const char *&s)
 bool dng_date_time::Parse (const char *s)
 	{
 	
-	fYear	= DateTimeParseU32 (s);
-	fMonth	= DateTimeParseU32 (s);
-	fDay	= DateTimeParseU32 (s);
-	fHour	= DateTimeParseU32 (s);
+	fYear   = DateTimeParseU32 (s);
+	fMonth  = DateTimeParseU32 (s);
+	fDay    = DateTimeParseU32 (s);
+	fHour   = DateTimeParseU32 (s);
 	fMinute = DateTimeParseU32 (s);
 	fSecond = DateTimeParseU32 (s);
 	
@@ -151,7 +164,7 @@ dng_string dng_time_zone::Encode_ISO_8601 () const
 			if (offset > 0)
 				{
 				
-				snprintf (s, 64, "+%02d:%02d", offset / 60, offset % 60);
+				sprintf (s, "+%02d:%02d", offset / 60, offset % 60);
 				
 				}
 				
@@ -160,7 +173,7 @@ dng_string dng_time_zone::Encode_ISO_8601 () const
 				
 				offset = -offset;
 				
-				snprintf (s, 64, "-%02d:%02d", offset / 60, offset % 60);
+				sprintf (s, "-%02d:%02d", offset / 60, offset % 60);
 				
 				}
 				
@@ -178,10 +191,10 @@ dng_string dng_time_zone::Encode_ISO_8601 () const
 
 dng_date_time_info::dng_date_time_info ()
 
-	:	fDateOnly	(true)
-	,	fDateTime	()
+	:	fDateOnly   (true)
+	,	fDateTime   ()
 	,	fSubseconds ()
-	,	fTimeZone	()
+	,	fTimeZone   ()
 	
 	{
 	
@@ -203,9 +216,9 @@ void dng_date_time_info::SetDate (uint32 year,
 								  uint32 day)
 	{
 	
-	fDateTime.fYear	 = year;
+	fDateTime.fYear  = year;
 	fDateTime.fMonth = month;
-	fDateTime.fDay	 = day;
+	fDateTime.fDay   = day;
 	
 	}
 	
@@ -218,106 +231,12 @@ void dng_date_time_info::SetTime (uint32 hour,
 	
 	fDateOnly = false;
 	
-	fDateTime.fHour	  = hour;
+	fDateTime.fHour   = hour;
 	fDateTime.fMinute = minute;
 	fDateTime.fSecond = second;
 	
 	}
-
-/*****************************************************************************/
-
-void dng_date_time_info::SetOffsetTime (const dng_string &s)
-	{
 	
-	// Initialize zone to invalid.
-	
-	dng_time_zone zone;
-	
-	SetZone (zone);
-	
-	// Parse EXIF OffsetTime format.
-	
-	if (s.Length () == 6 &&
-			(s.Get () [0] == '+' || s.Get () [0] == '-') &&
-			(s.Get () [1] >= '0' && s.Get () [1] <= '1') &&
-			(s.Get () [2] >= '0' && s.Get () [2] <= '9') &&
-			(s.Get () [3] == ':') &&
-			(s.Get () [4] >= '0' && s.Get () [4] <= '5') &&
-			(s.Get () [5] >= '0' && s.Get () [5] <= '9'))
-		{
-		
-		int32 hours = (s.Get () [1] - '0') * 10 +
-					  (s.Get () [2] - '0');
-			
-		int32 minutes = (s.Get () [4] - '0') * 10 +
-						(s.Get () [5] - '0');
-			
-		int32 offset = hours * 60 + minutes;
-		
-		if (s.Get () [0] == '-')
-			{
-			offset = -offset;
-			}
-			
-		zone.SetOffsetMinutes (offset);
-		
-		if (zone.IsValid ())
-			{
-			
-			SetZone (zone);
-			
-			}
-	
-		}
-	
-	}
-
-/*****************************************************************************/
-
-dng_string dng_date_time_info::OffsetTime () const
-	{
-	
-	dng_string result;
-	
-	if (TimeZone ().IsValid ())
-		{
-		
-		int32 offset = TimeZone ().OffsetMinutes ();
-		
-		char s [7];
-		
-		s [0] = (offset >= 0) ? '+' : '-';
-		
-		offset = Abs_int32 (offset);
-		
-		uint32 hours   = offset / 60;
-		uint32 minutes = offset % 60;
-		
-		s [1] = (hours / 10) + '0';
-		s [2] = (hours % 10) + '0';
-		
-		s [3] = ':';
-		
-		s [4] = (minutes / 10) + '0';
-		s [5] = (minutes % 10) + '0';
-
-		s [6] = 0;
-
-		result.Set (s);
-				
-		}
-		
-	else
-		{
-		
-		result.Set ("   :  ");
-		
-		}
-		
-	return result;
-	
-	}
-
 /*****************************************************************************/
 
 void dng_date_time_info::Decode_ISO_8601 (const char *s)
@@ -361,7 +280,7 @@ void dng_date_time_info::Decode_ISO_8601 (const char *s)
 		if (s [j] == 'T')
 			{
 			
-			unsigned hour	= 0;
+			unsigned hour   = 0;
 			unsigned minute = 0;
 			unsigned second = 0;
 			
@@ -431,7 +350,7 @@ void dng_date_time_info::Decode_ISO_8601 (const char *s)
 						int32 sign = (s [k] == '-' ? -1 : 1);
 						
 						unsigned tzhour = 0;
-						unsigned tzmin	= 0;
+						unsigned tzmin  = 0;
 						
 						if (sscanf (s + k + 1,
 									"%u:%u",
@@ -471,24 +390,22 @@ dng_string dng_date_time_info::Encode_ISO_8601 () const
 		
 		char s [256];
 	
-		snprintf (s,
-				  256,
-				  "%04u-%02u-%02u",
-				  (unsigned) fDateTime.fYear,
-				  (unsigned) fDateTime.fMonth,
-				  (unsigned) fDateTime.fDay);
+		sprintf (s,
+				 "%04u-%02u-%02u",
+				 (unsigned) fDateTime.fYear,
+				 (unsigned) fDateTime.fMonth,
+				 (unsigned) fDateTime.fDay);
 				 
 		result.Set (s);
 		
 		if (!fDateOnly)
 			{
 			
-			snprintf (s,
-					  256,
-					  "T%02u:%02u:%02u",
-					  (unsigned) fDateTime.fHour,
-					  (unsigned) fDateTime.fMinute,
-					  (unsigned) fDateTime.fSecond);
+			sprintf (s,
+					 "T%02u:%02u:%02u",
+					 (unsigned) fDateTime.fHour,
+					 (unsigned) fDateTime.fMinute,
+					 (unsigned) fDateTime.fSecond);
 					 
 			result.Append (s);
 			
@@ -523,7 +440,7 @@ dng_string dng_date_time_info::Encode_ISO_8601 () const
 				{
 			
 				// Kludge: Early versions of the XMP toolkit assume Zulu time
-				// if the time zone is missing.	 It is safer for fill in the
+				// if the time zone is missing.  It is safer for fill in the
 				// local time zone. 
 				
 				dng_time_zone tempZone = fTimeZone;
@@ -551,7 +468,7 @@ dng_string dng_date_time_info::Encode_ISO_8601 () const
 				}
 			
 			}
-				 
+			     
 		}
 	
 	return result;
@@ -566,9 +483,9 @@ void dng_date_time_info::Decode_IPTC_Date (const char *s)
 	if (strlen (s) == 8)
 		{
 	
-		unsigned year	= 0;
-		unsigned month	= 0;
-		unsigned day	= 0;
+		unsigned year   = 0;
+		unsigned month  = 0;
+		unsigned day    = 0;
 
 		if (sscanf (s,
 					"%4u%2u%2u",
@@ -599,15 +516,14 @@ dng_string dng_date_time_info::Encode_IPTC_Date () const
 		
 		char s [64];
 		
-		snprintf (s,
-				  64,
-				  "%04u%02u%02u",
-				  (unsigned) fDateTime.fYear,
-				  (unsigned) fDateTime.fMonth,
-				  (unsigned) fDateTime.fDay);
+		sprintf (s,
+			     "%04u%02u%02u",
+			     (unsigned) fDateTime.fYear,
+			     (unsigned) fDateTime.fMonth,
+			     (unsigned) fDateTime.fDay);
 				 
 		result.Set (s);
-				 
+			     
 		}
 	
 	return result;
@@ -634,11 +550,11 @@ void dng_date_time_info::Decode_IPTC_Time (const char *s)
 			
 			time [6] = 0;
 			
-			unsigned hour	= 0;
+			unsigned hour   = 0;
 			unsigned minute = 0;
 			unsigned second = 0;
 			unsigned tzhour = 0;
-			unsigned tzmin	= 0;
+			unsigned tzmin  = 0;
 			
 			if (sscanf (time,
 						"%2u%2u%2u",
@@ -675,7 +591,7 @@ void dng_date_time_info::Decode_IPTC_Time (const char *s)
 	else if (strlen (s) == 6)
 		{
 		
-		unsigned hour	= 0;
+		unsigned hour   = 0;
 		unsigned minute = 0;
 		unsigned second = 0;
 		
@@ -697,7 +613,7 @@ void dng_date_time_info::Decode_IPTC_Time (const char *s)
 	else if (strlen (s) == 4)
 		{
 		
-		unsigned hour	= 0;
+		unsigned hour   = 0;
 		unsigned minute = 0;
 		
 		if (sscanf (s,
@@ -731,32 +647,30 @@ dng_string dng_date_time_info::Encode_IPTC_Time () const
 		if (fTimeZone.IsValid ())
 			{
 		
-			snprintf (s,
-					  64,
-					  "%02u%02u%02u%c%02u%02u",
-					  (unsigned) fDateTime.fHour,
-					  (unsigned) fDateTime.fMinute,
-					  (unsigned) fDateTime.fSecond,
-					  (int) (fTimeZone.OffsetMinutes () >= 0 ? '+' : '-'),
-					  (unsigned) (Abs_int32 (fTimeZone.OffsetMinutes ()) / 60),
-					  (unsigned) (Abs_int32 (fTimeZone.OffsetMinutes ()) % 60));
+			sprintf (s,
+					 "%02u%02u%02u%c%02u%02u",
+					 (unsigned) fDateTime.fHour,
+					 (unsigned) fDateTime.fMinute,
+					 (unsigned) fDateTime.fSecond,
+					 (int) (fTimeZone.OffsetMinutes () >= 0 ? '+' : '-'),
+					 (unsigned) (Abs_int32 (fTimeZone.OffsetMinutes ()) / 60),
+					 (unsigned) (Abs_int32 (fTimeZone.OffsetMinutes ()) % 60));
 					 
 			}
 			
 		else
 			{
 			
-			snprintf (s,
-					  64,
-					  "%02u%02u%02u",
-					  (unsigned) fDateTime.fHour,
-					  (unsigned) fDateTime.fMinute,
-					  (unsigned) fDateTime.fSecond);
+			sprintf (s,
+					 "%02u%02u%02u",
+					 (unsigned) fDateTime.fHour,
+					 (unsigned) fDateTime.fMinute,
+					 (unsigned) fDateTime.fSecond);
 					 
 			}
 				 
 		result.Set (s);
-				 
+			     
 		}
 	
 	return result;
@@ -765,7 +679,7 @@ dng_string dng_date_time_info::Encode_IPTC_Time () const
 		
 /*****************************************************************************/
 
-static dng_std_mutex gDateTimeMutex;
+static dng_mutex gDateTimeMutex ("gDateTimeMutex");
 
 /*****************************************************************************/
 
@@ -781,10 +695,10 @@ void CurrentDateTimeAndZone (dng_date_time_info &info)
 	
 		{
 		
-		dng_lock_std_mutex lock (gDateTimeMutex);
+		dng_lock_mutex lock (&gDateTimeMutex);
 		
 		t  = *localtime (&sec);
-		zt = *gmtime	(&sec);
+		zt = *gmtime    (&sec);
 		
 		}
 		
@@ -792,7 +706,7 @@ void CurrentDateTimeAndZone (dng_date_time_info &info)
 		
 	dt.fYear   = t.tm_year + 1900;
 	dt.fMonth  = t.tm_mon + 1;
-	dt.fDay	   = t.tm_mday;
+	dt.fDay    = t.tm_mday;
 	dt.fHour   = t.tm_hour;
 	dt.fMinute = t.tm_min;
 	dt.fSecond = t.tm_sec;
@@ -803,7 +717,7 @@ void CurrentDateTimeAndZone (dng_date_time_info &info)
 	int tzMin  = t.tm_min  - zt.tm_min;
 	
 	bool zonePositive = (t.tm_year >  zt.tm_year) ||
-						(t.tm_year == zt.tm_year && t.tm_yday >	 zt.tm_yday) ||
+						(t.tm_year == zt.tm_year && t.tm_yday >  zt.tm_yday) ||
 						(t.tm_year == zt.tm_year && t.tm_yday == zt.tm_yday && tzHour > 0) ||
 						(t.tm_year == zt.tm_year && t.tm_yday == zt.tm_yday && tzHour == 0 && tzMin >= 0);
 						
@@ -844,7 +758,7 @@ void DecodeUnixTime (uint32 unixTime, dng_date_time &dt)
 	
 		{
 		
-		dng_lock_std_mutex lock (gDateTimeMutex);
+		dng_lock_mutex lock (&gDateTimeMutex);
 		
 		#if qMacOS && !defined(__MACH__)
 		
@@ -872,7 +786,7 @@ void DecodeUnixTime (uint32 unixTime, dng_date_time &dt)
 	
 	dt.fYear   = t.tm_year + 1900;
 	dt.fMonth  = t.tm_mon + 1;
-	dt.fDay	   = t.tm_mday;
+	dt.fDay    = t.tm_mday;
 	dt.fHour   = t.tm_hour;
 	dt.fMinute = t.tm_min;
 	dt.fSecond = t.tm_sec;
@@ -894,7 +808,7 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 		CFTimeZoneRef zoneRef = CFTimeZoneCopyDefault ();
 
 		CFReleaseHelper<CFTimeZoneRef> zoneRefDeleter (zoneRef);
-		
+
 		if (zoneRef)
 			{
 
@@ -905,9 +819,9 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 												kCFGregorianCalendar);
 
 			CFReleaseHelper<CFCalendarRef> calendarDeleter (calendar);
-			
+
 			CFAbsoluteTime absTime;
-			
+
 			if (CFCalendarComposeAbsoluteTime (calendar,
 											   &absTime,
 											   "yMdHms",
@@ -918,7 +832,7 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 											   dt.fMinute,
 											   dt.fSecond))
 				{
-				
+
 				CFTimeInterval secondsDelta = CFTimeZoneGetSecondsFromGMT (zoneRef, absTime);
 
 				result.SetOffsetSeconds (Round_int32 (secondsDelta));
@@ -936,24 +850,23 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 		
 		#if qWinOS
 		
-		if (&GetTimeZoneInformation			 != NULL &&
-			&SystemTimeToTzSpecificLocalTime != NULL &&
-			&SystemTimeToFileTime			 != NULL)
+		if (GetTimeZoneInformation          != NULL &&
+			SystemTimeToTzSpecificLocalTime != NULL &&
+		    SystemTimeToFileTime            != NULL)
 			{
 			
 			TIME_ZONE_INFORMATION tzInfo;
 			
-			DWORD tzId = GetTimeZoneInformation (&tzInfo);
-			(void) tzId;
+			DWORD x = GetTimeZoneInformation (&tzInfo);
 			
 			SYSTEMTIME localST;
 			
 			memset (&localST, 0, sizeof (localST));
 
-			localST.wYear	= (WORD) dt.fYear;
-			localST.wMonth	= (WORD) dt.fMonth;
-			localST.wDay	= (WORD) dt.fDay;
-			localST.wHour	= (WORD) dt.fHour;
+			localST.wYear   = (WORD) dt.fYear;
+			localST.wMonth  = (WORD) dt.fMonth;
+			localST.wDay    = (WORD) dt.fDay;
+			localST.wHour   = (WORD) dt.fHour;
 			localST.wMinute = (WORD) dt.fMinute;
 			localST.wSecond = (WORD) dt.fSecond;
 			
@@ -966,10 +879,10 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 				FILETIME utcFT;
 				
 				(void) SystemTimeToFileTime (&localST, &localFT);
-				(void) SystemTimeToFileTime (&utcST	 , &utcFT  );
+				(void) SystemTimeToFileTime (&utcST  , &utcFT  );
 				
 				uint64 time1 = (((uint64) localFT.dwHighDateTime) << 32) + localFT.dwLowDateTime;
-				uint64 time2 = (((uint64) utcFT	 .dwHighDateTime) << 32) + utcFT  .dwLowDateTime;
+				uint64 time2 = (((uint64) utcFT  .dwHighDateTime) << 32) + utcFT  .dwLowDateTime;
 				
 				// FILETIMEs are in units to 100 ns.  Convert to seconds.
 				
@@ -1009,7 +922,7 @@ dng_time_zone LocalTimeZone (const dng_date_time &dt)
 
 dng_date_time_storage_info::dng_date_time_storage_info ()
 
-	:	fOffset	(kDNGStreamInvalidOffset	 )
+	:	fOffset	(kDNGStreamInvalidOffset     )
 	,	fFormat	(dng_date_time_format_unknown)
 	
 	{

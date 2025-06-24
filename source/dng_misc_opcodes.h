@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2008-2019 Adobe Systems Incorporated
+// Copyright 2008-2009 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_misc_opcodes.h#2 $ */ 
+/* $DateTime: 2012/08/02 06:09:06 $ */
+/* $Change: 841096 $ */
+/* $Author: erichan $ */
 
 /** \file
  * Miscellaneous DNG opcodes.
@@ -17,10 +22,7 @@
 
 /*****************************************************************************/
 
-#include "dng_classes.h"
-
 #include "dng_opcodes.h"
-#include "dng_rational.h"
 
 /*****************************************************************************/
 
@@ -75,8 +77,6 @@ class dng_area_spec
 		
 		uint32 fRowPitch;
 		uint32 fColPitch;
-
-		dng_urational fAreaScale;
 		
 	public:
 
@@ -88,12 +88,11 @@ class dng_area_spec
 					   uint32 rowPitch = 1,
 					   uint32 colPitch = 1)
 					   
-			:	fArea	   (area)
-			,	fPlane	   (plane)
-			,	fPlanes	   (planes)
-			,	fRowPitch  (rowPitch)
-			,	fColPitch  (colPitch)
-			,	fAreaScale (1, 1)
+			:	fArea     (area)
+			,	fPlane    (plane)
+			,	fPlanes   (planes)
+			,	fRowPitch (rowPitch)
+			,	fColPitch (colPitch)
 			
 			{
 			}
@@ -105,32 +104,30 @@ class dng_area_spec
 			return fArea;
 			}
 
-		dng_rect ScaledArea () const;
-
 		/// The first plane.
 		
-		uint32 Plane () const
+		const uint32 Plane () const
 			{
 			return fPlane;
 			}
 
 		/// The total number of planes.
 		
-		uint32 Planes () const
+		const uint32 Planes () const
 			{
 			return fPlanes;
 			}
 
 		/// The row pitch (i.e., stride). A pitch of 1 means all rows.
 		
-		uint32 RowPitch () const
+		const uint32 RowPitch () const
 			{
 			return fRowPitch;
 			}
 		
 		/// The column pitch (i.e., stride). A pitch of 1 means all columns.
 		
-		uint32 ColPitch () const
+		const uint32 ColPitch () const
 			{
 			return fColPitch;
 			}
@@ -147,20 +144,6 @@ class dng_area_spec
 		/// area and the specified tile.
 		
 		dng_rect Overlap (const dng_rect &tile) const;
-
-		/// Same as Overlap but uses the area scale factor (see
-		/// ApplyAreaScale, below).
-		
-		dng_rect ScaledOverlap (const dng_rect &tile) const;
-
-		/// Apply scale factor to account for a resized image. The scale
-		/// factor is not cumulative; the new scale factor replaces the
-		/// previous factor. The scale factor is only applied to the area for
-		/// the purposes of applying the opcode (see ScaledArea); it is not an
-		/// intrinsic part of this object and will not be included in the data
-		/// stream.
-
-		void ApplyAreaScale (const dng_urational & /* scale */);
 
 	};
 
@@ -179,8 +162,6 @@ class dng_opcode_MapTable: public dng_inplace_opcode
 		AutoPtr<dng_memory_block> fTable;
 		
 		uint32 fCount;
-  
-		AutoPtr<dng_memory_block> fBlackAdjustedTable;
 		
 	public:
 
@@ -195,31 +176,18 @@ class dng_opcode_MapTable: public dng_inplace_opcode
 		dng_opcode_MapTable (dng_host &host,
 							 dng_stream &stream);
 	
-		void PutData (dng_stream &stream) const override;
+		virtual void PutData (dng_stream &stream) const;
 
-		uint32 BufferPixelType (uint32 imagePixelType) override;
+		virtual uint32 BufferPixelType (uint32 imagePixelType);
 			
-		dng_rect ModifiedBounds (const dng_rect &imageBounds) override;
+		virtual dng_rect ModifiedBounds (const dng_rect &imageBounds);
 	
-		void Prepare (dng_negative &negative,
-					  uint32 threadCount,
-					  const dng_point &tileSize,
-					  const dng_rect &imageBounds,
-					  uint32 imagePlanes,
-					  uint32 bufferPixelType,
-					  dng_memory_allocator &allocator) override;
-
-		void ProcessArea (dng_negative &negative,
-						  uint32 threadIndex,
-						  dng_pixel_buffer &buffer,
-						  const dng_rect &dstArea,
-						  const dng_rect &imageBounds) override;
+		virtual void ProcessArea (dng_negative &negative,
+								  uint32 threadIndex,
+								  dng_pixel_buffer &buffer,
+								  const dng_rect &dstArea,
+								  const dng_rect &imageBounds);
 								  
-		void ApplyAreaScale (const dng_urational &scale) override
-			{
-			fAreaSpec.ApplyAreaScale (scale);
-			}
-		
 	private:
 	
 		void ReplicateLastEntry ();
@@ -241,7 +209,7 @@ class dng_opcode_MapPolynomial: public dng_inplace_opcode
 			kMaxDegree = 8
 			};
 	
-	protected:
+	private:
 	
 		dng_area_spec fAreaSpec;
 		
@@ -268,44 +236,18 @@ class dng_opcode_MapPolynomial: public dng_inplace_opcode
 	
 		dng_opcode_MapPolynomial (dng_stream &stream);
 	
-		virtual void PutData (dng_stream &stream) const override;
+		virtual void PutData (dng_stream &stream) const;
 
-		virtual uint32 BufferPixelType (uint32 imagePixelType) override;
+		virtual uint32 BufferPixelType (uint32 imagePixelType);
 			
-		virtual dng_rect ModifiedBounds (const dng_rect &imageBounds) override;
+		virtual dng_rect ModifiedBounds (const dng_rect &imageBounds);
 	
 		virtual void ProcessArea (dng_negative &negative,
 								  uint32 threadIndex,
 								  dng_pixel_buffer &buffer,
 								  const dng_rect &dstArea,
-								  const dng_rect &imageBounds) override;
-
-		uint32 Degree () const
-			{
-			return fDegree;
-			}
-
-		const real64 * Coefficients () const
-			{
-			return fCoefficient;
-			}
+								  const dng_rect &imageBounds);
 								  
-		void ApplyAreaScale (const dng_urational &scale) override
-			{
-			fAreaSpec.ApplyAreaScale (scale);
-			}
-		
-	protected:
-
-		virtual void DoProcess (dng_pixel_buffer &buffer,
-								const dng_rect &area,
-								const uint32 plane,
-								const uint32 rowPitch,
-								const uint32 colPitch,
-								const real32 *coefficients,
-								const uint32 degree,
-								uint16 blackLevel) const;
-
 	};
 
 /*****************************************************************************/

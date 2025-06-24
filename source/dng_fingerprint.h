@@ -1,10 +1,15 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_fingerprint.h#2 $ */ 
+/* $DateTime: 2012/07/11 10:36:56 $ */
+/* $Change: 838485 $ */
+/* $Author: tknoll $ */
 
 /** \file
  * Fingerprint (cryptographic hashing) support for generating strong hashes of image
@@ -21,11 +26,8 @@
 #include "dng_exceptions.h"
 #include "dng_types.h"
 #include "dng_stream.h"
-#include "dng_string.h"
 
 #include <cstring>
-#include <unordered_set>
-#include <vector>
 
 /*****************************************************************************/
 
@@ -43,8 +45,6 @@ class dng_fingerprint
 	public:
 	
 		dng_fingerprint ();
-		
-		explicit dng_fingerprint (const char *hex);
 		
 		/// Check if fingerprint is all zeros.
 
@@ -75,10 +75,6 @@ class dng_fingerprint
 			return !(*this == print);
 			}
 			
-		/// Comparison test for fingerprints.
-			
-		bool operator< (const dng_fingerprint &print) const;
-		
 		/// Produce a 32-bit hash value from fingerprint used for faster hashing of
 		/// fingerprints.
 			
@@ -91,10 +87,6 @@ class dng_fingerprint
 
 		void ToUtf8HexString (char resultStr [2 * kDNGFingerprintSize + 1]) const;
 
-		/// Convert fingerprint to UTF-8 string and return result as a dng_string.
-
-		dng_string ToUtf8HexString () const;
-
 		/// Convert UTF-8 string to fingerprint. Returns true on success, false on
 		/// failure.
 		///
@@ -104,16 +96,6 @@ class dng_fingerprint
 		/// \retval True indicates success.
 
 		bool FromUtf8HexString (const char inputStr [2 * kDNGFingerprintSize + 1]);
-
-		/// Convert dng_string string to fingerprint. Returns true on success,
-		/// false on failure.
-		///
-		/// \param inputStr The input dng_string from which the UTF-8 encoding of the
-		/// fingerprint will be read.
-		///
-		/// \retval True indicates success.
-
-		bool FromUtf8HexString (const dng_string &inputStr);
 
 	};
 
@@ -137,33 +119,6 @@ struct dng_fingerprint_less_than
 		}
 
 	};
-
-/******************************************************************************/
-
-/// \brief Utility to hash fingerprints (e.g., for hashtables).
-
-struct dng_fingerprint_hash
-	{
-
-	/// Hash function.
-
-	size_t operator () (const dng_fingerprint &digest) const
-		{
-
-		return (size_t) digest.Collapse32 ();
-
-		}
-
-	};
-
-/******************************************************************************/
-
-typedef std::unordered_set<dng_fingerprint,
-						   dng_fingerprint_hash> dng_fingerprint_table;
-
-/******************************************************************************/
-
-typedef std::vector<dng_fingerprint> dng_fingerprint_vector;
 
 /******************************************************************************/
 
@@ -271,7 +226,11 @@ class dng_md5_printer
 			
 		// FF, GG, HH, and II transformations for rounds 1, 2, 3, and 4.
 		
-		DNG_ATTRIB_NO_SANITIZE("unsigned-integer-overflow")
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_sanitize)
+		__attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+#endif
 		static inline void FF (uint32 &a,
 							   uint32 b,
 							   uint32 c,
@@ -285,7 +244,11 @@ class dng_md5_printer
 			a += b;
 			}
 
-		DNG_ATTRIB_NO_SANITIZE("unsigned-integer-overflow")
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_sanitize)
+		__attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+#endif
 		static inline void GG (uint32 &a,
 							   uint32 b,
 							   uint32 c,
@@ -299,7 +262,11 @@ class dng_md5_printer
 			a += b;
 			}
 
-		DNG_ATTRIB_NO_SANITIZE("unsigned-integer-overflow")
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_sanitize)
+		__attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+#endif
 		static inline void HH (uint32 &a,
 							   uint32 b,
 							   uint32 c,
@@ -313,7 +280,11 @@ class dng_md5_printer
 			a += b;
 			}
 
-		DNG_ATTRIB_NO_SANITIZE("unsigned-integer-overflow")
+#if defined(__clang__) && defined(__has_attribute)
+#if __has_attribute(no_sanitize)
+		__attribute__((no_sanitize("unsigned-integer-overflow")))
+#endif
+#endif
 		static inline void II (uint32 &a,
 							   uint32 b,
 							   uint32 c,
@@ -332,11 +303,11 @@ class dng_md5_printer
 		
 	private:
 	
-		uint32 state [4];
-		
-		uint32 count [2];
-		
-		uint8 buffer [64];
+	  	uint32 state [4];
+	  	
+	  	uint32 count [2];
+	  	
+	  	uint8 buffer [64];
 		
 		bool final;
 		

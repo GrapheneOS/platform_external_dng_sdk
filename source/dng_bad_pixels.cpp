@@ -1,9 +1,16 @@
 /*****************************************************************************/
-// Copyright 2008-2019 Adobe Systems Incorporated
+// Copyright 2008 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
+/*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_bad_pixels.cpp#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
+
 /*****************************************************************************/
 
 #include "dng_bad_pixels.h"
@@ -27,7 +34,7 @@ dng_opcode_FixBadPixelsConstant::dng_opcode_FixBadPixelsConstant
 						   dngVersion_1_3_0_0,
 						   0)
 					
-	,	fConstant	(constant)
+	,	fConstant   (constant)
 	,	fBayerPhase (bayerPhase)
 	
 	{
@@ -43,7 +50,7 @@ dng_opcode_FixBadPixelsConstant::dng_opcode_FixBadPixelsConstant
 						   stream,
 						   "FixBadPixelsConstant")
 					
-	,	fConstant	(0)
+	,	fConstant   (0)
 	,	fBayerPhase (0)
 	
 	{
@@ -53,7 +60,7 @@ dng_opcode_FixBadPixelsConstant::dng_opcode_FixBadPixelsConstant
 		ThrowBadFormat ();
 		}
 		
-	fConstant	= stream.Get_uint32 ();
+	fConstant   = stream.Get_uint32 ();
 	fBayerPhase = stream.Get_uint32 ();
 	
 	#if qDNGValidate
@@ -356,7 +363,7 @@ void dng_bad_pixel_list::Sort ()
 		{
 	
 		std::sort (fBadPoints.begin (),
-				   fBadPoints.end	(),
+				   fBadPoints.end   (),
 				   SortBadPoints);
 				   
 		}
@@ -482,8 +489,8 @@ bool dng_bad_pixel_list::IsPointValid (const dng_point &pt,
 	
 	// The point must be in the image bounds to be valid.
 	
-	if (pt.v <	imageBounds.t ||
-		pt.h <	imageBounds.l ||
+	if (pt.v <  imageBounds.t ||
+		pt.h <  imageBounds.l ||
 		pt.v >= imageBounds.b ||
 		pt.h >= imageBounds.r)
 		{
@@ -544,8 +551,8 @@ bool dng_bad_pixel_list::IsPointValid (const dng_point &pt,
 		
 		if (pt.v >= r.t &&
 			pt.h >= r.l &&
-			pt.v <	r.b &&
-			pt.h <	r.r)
+			pt.v <  r.b &&
+			pt.h <  r.r)
 			{
 			return false;
 			}
@@ -601,12 +608,8 @@ dng_opcode_FixBadPixelsList::dng_opcode_FixBadPixelsList (dng_stream &stream)
 	
 	uint32 pCount = stream.Get_uint32 ();
 	uint32 rCount = stream.Get_uint32 ();
-	
 	uint32 expectedSize =
-		SafeUint32Add (12,
-					   SafeUint32Add (SafeUint32Mult (pCount, 8),
-									  SafeUint32Mult (rCount, 16)));
-
+	SafeUint32Add(12, SafeUint32Add(SafeUint32Mult(pCount, 8), SafeUint32Mult(rCount, 16)));
 	if (size != expectedSize)
 		{
 		ThrowBadFormat ();
@@ -655,7 +658,7 @@ dng_opcode_FixBadPixelsList::dng_opcode_FixBadPixelsList (dng_stream &stream)
 		
 		for (index = 0; index < pCount && index < gDumpLineLimit; index++)
 			{
-			printf ("\tPixel [%u]: v=%d, h=%d\n",
+			printf ("    Pixel [%u]: v=%d, h=%d\n",
 					(unsigned) index,
 					(int) fList->Point (index).v,
 					(int) fList->Point (index).h);
@@ -663,14 +666,14 @@ dng_opcode_FixBadPixelsList::dng_opcode_FixBadPixelsList (dng_stream &stream)
 					
 		if (pCount > gDumpLineLimit)
 			{
-			printf ("\t ... %u bad pixels skipped\n", (unsigned) (pCount - gDumpLineLimit));
+			printf ("    ... %u bad pixels skipped\n", (unsigned) (pCount - gDumpLineLimit));
 			}
 		
 		printf ("Bad Rects: %u\n", (unsigned) rCount);
 		
 		for (index = 0; index < rCount && index < gDumpLineLimit; index++)
 			{
-			printf ("\tRect [%u]: t=%d, l=%d, b=%d, r=%d\n",
+			printf ("    Rect [%u]: t=%d, l=%d, b=%d, r=%d\n",
 					(unsigned) index,
 					(int) fList->Rect (index).t,
 					(int) fList->Rect (index).l,
@@ -680,7 +683,7 @@ dng_opcode_FixBadPixelsList::dng_opcode_FixBadPixelsList (dng_stream &stream)
 		
 		if (rCount > gDumpLineLimit)
 			{
-			printf ("\t ... %u bad rects skipped\n", (unsigned) (rCount - gDumpLineLimit));
+			printf ("    ... %u bad rects skipped\n", (unsigned) (rCount - gDumpLineLimit));
 			}
 		
 		}
@@ -808,7 +811,7 @@ void dng_opcode_FixBadPixelsList::FixIsolatedPixel (dng_pixel_buffer &buffer,
 	
 	uint16 *p0 = buffer.DirtyPixel_uint16 (badPoint.v - 2, badPoint.h - 2, 0);
 	uint16 *p1 = buffer.DirtyPixel_uint16 (badPoint.v - 1, badPoint.h - 2, 0);
-	uint16 *p2 = buffer.DirtyPixel_uint16 (badPoint.v	 , badPoint.h - 2, 0);
+	uint16 *p2 = buffer.DirtyPixel_uint16 (badPoint.v    , badPoint.h - 2, 0);
 	uint16 *p3 = buffer.DirtyPixel_uint16 (badPoint.v + 1, badPoint.h - 2, 0);
 	uint16 *p4 = buffer.DirtyPixel_uint16 (badPoint.v + 2, badPoint.h - 2, 0);
 
@@ -1016,8 +1019,6 @@ void dng_opcode_FixBadPixelsList::FixIsolatedPixel (dng_pixel_buffer &buffer,
 		count += 2;
 		}
 
-	count = Max_uint32 (count, 1);			 // Suppress div-by-zero warning.
-
 	uint32 estimate = (total + (count >> 1)) / count;
 	
 	p2 [2] = (uint16) estimate;
@@ -1112,11 +1113,9 @@ void dng_opcode_FixBadPixelsList::FixClusteredPixel (dng_pixel_buffer &buffer,
 	
 	char s [256];
 	
-	snprintf (s,
-			  256,
-			  "Unable to repair bad pixel, row %d, column %d",
-			  (int) badPoint.v,
-			  (int) badPoint.h);
+	sprintf (s, "Unable to repair bad pixel, row %d, column %d",
+			 (int) badPoint.v,
+			 (int) badPoint.h);
 	
 	ReportWarning (s);
 	
@@ -1139,7 +1138,7 @@ void dng_opcode_FixBadPixelsList::FixSingleColumn (dng_pixel_buffer &buffer,
 		uint16 *p1 = buffer.DirtyPixel_uint16 (row - 3, badRect.l - 4, 0);
 		uint16 *p2 = buffer.DirtyPixel_uint16 (row - 2, badRect.l - 4, 0);
 		uint16 *p3 = buffer.DirtyPixel_uint16 (row - 1, badRect.l - 4, 0);
-		uint16 *p4 = buffer.DirtyPixel_uint16 (row	  , badRect.l - 4, 0);
+		uint16 *p4 = buffer.DirtyPixel_uint16 (row    , badRect.l - 4, 0);
 		uint16 *p5 = buffer.DirtyPixel_uint16 (row + 1, badRect.l - 4, 0);
 		uint16 *p6 = buffer.DirtyPixel_uint16 (row + 2, badRect.l - 4, 0);
 		uint16 *p7 = buffer.DirtyPixel_uint16 (row + 3, badRect.l - 4, 0);
@@ -1235,8 +1234,8 @@ void dng_opcode_FixBadPixelsList::FixSingleColumn (dng_pixel_buffer &buffer,
 			// across green types.
 			
 			int32 split = ((g22 + g62 + g26 + g66) * 4 +
-						   (g42 + g46			 ) * 8 -
-						   (g11 + g13 + g15 + g17)	   -
+						   (g42 + g46            ) * 8 -
+						   (g11 + g13 + g15 + g17)     -
 						   (g31 + g33 + g35 + g37) * 3 -
 						   (g51 + g53 + g55 + g57) * 3 -
 						   (g71 + g73 + g75 + g77) + 16) >> 5;
@@ -1508,8 +1507,6 @@ void dng_opcode_FixBadPixelsList::FixSingleColumn (dng_pixel_buffer &buffer,
 			count += 2;
 			}
 
-		count = Max_uint32 (count, 1);		 // Suppress div-by-zero warning.
-
 		uint32 estimate = (total + (count >> 1)) / count;
 		
 		p4 [4] = (uint16) Pin_uint32 (lower, estimate, upper);
@@ -1540,7 +1537,7 @@ void dng_opcode_FixBadPixelsList::FixSingleRow (dng_pixel_buffer &buffer,
 /*****************************************************************************/
 
 void dng_opcode_FixBadPixelsList::FixClusteredRect (dng_pixel_buffer &buffer,
-													const dng_rect &badRect,
+												    const dng_rect &badRect,
 													const dng_rect &imageBounds)
 	{
 	
@@ -1713,10 +1710,6 @@ void dng_opcode_FixBadPixelsList::FixClusteredRect (dng_pixel_buffer &buffer,
 		ReportWarning ("Unable to repair bad rectangle");
 		
 		}
-
-	#else
-
-	(void) didFail;
 	
 	#endif
 	

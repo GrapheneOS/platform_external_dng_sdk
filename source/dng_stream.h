@@ -1,13 +1,18 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2007 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
 
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_stream.h#2 $ */ 
+/* $DateTime: 2012/06/01 07:28:57 $ */
+/* $Change: 832715 $ */
+/* $Author: tknoll $ */
+
 /** Data stream abstraction for serializing and deserializing sequences of
- *	basic types and RAW image data.
+ *  basic types and RAW image data.
  */
 
 /*****************************************************************************/
@@ -17,12 +22,10 @@
 
 /*****************************************************************************/
 
-#include "dng_auto_ptr.h"
 #include "dng_classes.h"
 #include "dng_types.h"
 #include "dng_memory.h"
 #include "dng_rational.h"
-#include "dng_uncopyable.h"
 #include "dng_utils.h"
 
 /*****************************************************************************/
@@ -35,14 +38,8 @@ const uint64 kDNGStreamInvalidOffset = (uint64) (int64) -1;
 
 /// Base stream abstraction. Has support for going between stream and pointer
 /// abstraction.
-///
-/// Note that it is the caller's responsibility to call the Flush method to
-/// ensure that data is fully written to the underlying storage. The class
-/// destructor does not automatically call Flush, because Flush may throw
-/// exceptions (e.g., write permissions, disk full) and it is up to the caller
-/// to handle these appropriately.
 
-class dng_stream: private dng_uncopyable
+class dng_stream
 	{
 	
 	public:
@@ -50,8 +47,8 @@ class dng_stream: private dng_uncopyable
 		enum
 			{
 			
-			kSmallBufferSize =	8 * 1024,
-			kBigBufferSize	 = 64 * 1024,
+			kSmallBufferSize =  4 * 1024,
+			kBigBufferSize   = 64 * 1024,
 			
 			kDefaultBufferSize = kSmallBufferSize
 			
@@ -69,7 +66,7 @@ class dng_stream: private dng_uncopyable
 	
 		uint64 fPosition;
 		
-		AutoPtr<dng_memory_block> fMemBlock;
+		dng_memory_data fMemBlock;
 		
 		uint8 *fBuffer;
 		
@@ -165,11 +162,6 @@ class dng_stream: private dng_uncopyable
 			return fBufferSize;
 			}
 
-		/// Change the buffer size on the stream, if possible.
-				
-		void SetBufferSize (dng_memory_allocator &allocator,
-							uint32 newBufferSize);
-
 		/// Getter for length of data in stream.
 		/// \retval Length of readable data in stream.
 			
@@ -219,8 +211,7 @@ class dng_stream: private dng_uncopyable
 		/// This works for all streams, but requires copying the data to a new buffer.
 		/// \param allocator Allocator used to allocate memory.
 
-		dng_memory_block * AsMemoryBlock (dng_memory_allocator &allocator,
-										  uint32 numLeadingZeroBytes = 0);
+		dng_memory_block * AsMemoryBlock (dng_memory_allocator &allocator);
 
 		/// Seek to a new position in stream for reading.
 
@@ -233,16 +224,7 @@ class dng_stream: private dng_uncopyable
 			{
 			SetReadPosition (Position () + delta);
 			}
-		
-		/// Quick check to see if data range in completely buffered.
 
-		bool DataInBuffer (uint64 count,
-						   uint64 offset)
-			{
-			return (offset		   >= fBufferStart &&
-					offset + count <= fBufferEnd);
-			}
-		
 		/// Get data from stream. Exception is thrown and no data is read if 
 		/// insufficient data available in stream.
 		/// \param data Buffer to put data into. Must be valid for count bytes.
@@ -250,7 +232,7 @@ class dng_stream: private dng_uncopyable
 		/// \exception dng_exception with fErrorCode equal to dng_error_end_of_file 
 		/// if not enough data in stream.
 		
-		void Get (void *data, uint32 count, uint32 maxOverRead=0);
+		void Get (void *data, uint32 count);
 
 		/// Seek to a new position in stream for writing.
 		
@@ -304,8 +286,8 @@ class dng_stream: private dng_uncopyable
 		void Put_uint8 (uint8 x)
 			{
 			
-			if (fBufferDirty			   &&
-				fPosition  >= fBufferStart &&
+			if (fBufferDirty               &&
+			    fPosition  >= fBufferStart &&
 				fPosition  <= fBufferEnd   &&
 				fPosition  <  fBufferLimit)
 				{
@@ -350,24 +332,8 @@ class dng_stream: private dng_uncopyable
 		/// \exception dng_exception with fErrorCode equal to dng_error_end_of_file
 		/// if not enough data in stream.
 		
-		uint32 Get_uint32();
-
-#if !qDNGBigEndian
-		inline // ep, enable compiler inlining
-		uint32 Get_uint32_LE ()
-			{
-	
-			uint32 x;
-	
-			Get (&x, 4, 3); // Allow 3-byte overread (undefined data returned but not used)
-
-			// No check for fSwapBytes
-
-			return x;
-	
-			}
-#endif
-
+		uint32 Get_uint32 ();
+		
 		/// Put an unsigned 32-bit integer to stream and advance write position. 
 		/// Byte swap if byte swapping is turned on.
 		/// \param x One unsigned 32-bit integer.
@@ -506,11 +472,6 @@ class dng_stream: private dng_uncopyable
 		void Get_CString (char *data,
 						  uint32 maxLength);
 		
-		/// Puts an 8-bit character string from stream, including trailing NUL.
-		/// \param data Buffer pointing to null terminated string.
-
-		void Put_CString (const char *data);
-		
 		/// Get a 16-bit character string from stream and advance read position.
 		/// 16-bit characters are truncated to 8-bits.
 		/// Routine always reads until a NUL character (16-bits of zero) is read.
@@ -547,16 +508,6 @@ class dng_stream: private dng_uncopyable
 
 		uint32 TagValue_uint32 (uint32 tagType);
 
-		/// Get a value of size indicated by tag type from stream and advance
-		/// read position. Byte swap if byte swapping is turned on and tag type
-		/// is larger than a byte. Value is returned as an unsigned 64-bit integer.
-		/// \param tagType Tag type of data stored in stream.
-		/// \retval One unsigned 64-bit integer.
-		/// \exception dng_exception with fErrorCode equal to dng_error_end_of_file
-		/// if not enough data in stream.
-
-		uint64 TagValue_uint64 (uint32 tagType);
-
 		/// Get a value of size indicated by tag type from stream and advance read
 		/// position. Byte swap if byte swapping is turned on and tag type is larger
 		/// than a byte. Value is returned as a 32-bit integer. 
@@ -567,17 +518,7 @@ class dng_stream: private dng_uncopyable
 
 		int32 TagValue_int32 (uint32 tagType);
 		
-		/// Get a value of size indicated by tag type from stream and advance read
-		/// position. Byte swap if byte swapping is turned on and tag type is larger
-		/// than a byte. Value is returned as a 64-bit integer.
-		/// \param tagType Tag type of data stored in stream.
-		/// \retval One 64-bit integer.
-		/// \exception dng_exception with fErrorCode equal to dng_error_end_of_file
-		/// if not enough data in stream.
-
-		int64 TagValue_int64 (uint32 tagType);
-		
-		/// Get a value of size indicated by tag type from stream and advance read
+		/// Get a value of size indicated by tag type from stream and advance read 
 		/// position. Byte swap if byte swapping is turned on and tag type is larger
 		/// than a byte. Value is returned as a dng_urational. 
 		/// \param tagType Tag type of data stored in stream.
@@ -635,73 +576,16 @@ class dng_stream: private dng_uncopyable
 		
 		void DuplicateStream (dng_stream &dstStream);
 		
-	};
-	
-/*****************************************************************************/
-
-class dng_stream_double_buffered : public dng_stream
-	{
-	
 	private:
 	
-		dng_stream &fStream;
-		
-	public:
+		// Hidden copy constructor and assignment operator.
 	
-		dng_stream_double_buffered (dng_stream &stream,
-									uint32 bufferSize = kDefaultBufferSize)
+		dng_stream (const dng_stream &stream);
 		
-			:	dng_stream ((dng_abort_sniffer *) NULL,
-							bufferSize,
-							stream.OffsetInOriginalFile ())
+		dng_stream & operator= (const dng_stream &stream);
 		
-			,	fStream (stream)
-		
-			{
-			SetBigEndian (fStream.BigEndian ());
-			}
-		
-	protected:
-	
-		virtual uint64 DoGetLength ()
-			{
-			return fStream.Length ();
-			}
-	
-		virtual void DoRead (void *data,
-							 uint32 count,
-							 uint64 offset)
-			{
-			fStream.SetReadPosition (offset);
-			fStream.Get (data, count);
-			}
-
 	};
-
-/*****************************************************************************/
-
-class dng_stream_contiguous_read_hint
-	{
 	
-	private:
-	
-		dng_stream &fStream;
-		
-		dng_memory_allocator &fAllocator;
-		
-		uint32 fOldBufferSize;
-		
-	public:
-		
-		dng_stream_contiguous_read_hint (dng_stream &stream,
-										 dng_memory_allocator &allocator,
-										 uint64 offset,
-										 uint64 count);
-		
-		~dng_stream_contiguous_read_hint ();
-	 
-	};
-
 /*****************************************************************************/
 
 class TempBigEndian
@@ -745,7 +629,7 @@ class TempLittleEndian: public TempBigEndian
 				
 /*****************************************************************************/
 
-class TempStreamSniffer: private dng_uncopyable
+class TempStreamSniffer
 	{
 	
 	private:
@@ -757,15 +641,23 @@ class TempStreamSniffer: private dng_uncopyable
 	public:
 	
 		TempStreamSniffer (dng_stream &stream,
-						   dng_abort_sniffer *sniffer);
+					       dng_abort_sniffer *sniffer);
 						 
-		~TempStreamSniffer ();
+		virtual ~TempStreamSniffer ();
+		
+	private:
+	
+		// Hidden copy constructor and assignment operator.
+	
+		TempStreamSniffer (const TempStreamSniffer &temp);
+		
+		TempStreamSniffer & operator= (const TempStreamSniffer &temp);
 		
 	};
 				
 /*****************************************************************************/
 
-class PreserveStreamReadPosition: private dng_uncopyable
+class PreserveStreamReadPosition
 	{
 	
 	private:
@@ -789,6 +681,14 @@ class PreserveStreamReadPosition: private dng_uncopyable
 			fStream.SetReadPosition (fPosition);
 			}
 	
+	private:
+	
+		// Hidden copy constructor and assignment operator.
+	
+		PreserveStreamReadPosition (const PreserveStreamReadPosition &rhs);
+		
+		PreserveStreamReadPosition & operator= (const PreserveStreamReadPosition &rhs);
+		
 	};
 				
 /*****************************************************************************/

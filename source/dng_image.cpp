@@ -1,9 +1,16 @@
 /*****************************************************************************/
-// Copyright 2006-2019 Adobe Systems Incorporated
+// Copyright 2006-2008 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:	Adobe permits you to use, modify, and distribute this file in
+// NOTICE:  Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
+/*****************************************************************************/
+
+/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_image.cpp#1 $ */ 
+/* $DateTime: 2012/05/30 13:28:51 $ */
+/* $Change: 832332 $ */
+/* $Author: tknoll $ */
+
 /*****************************************************************************/
 
 #include "dng_image.h"
@@ -19,10 +26,10 @@
 /*****************************************************************************/
 
 dng_tile_buffer::dng_tile_buffer (const dng_image &image,
-								  const dng_rect &tile,
-								  bool dirty)
-								  
-	:	fImage	 (image)
+						 		  const dng_rect &tile,
+						 		  bool dirty)
+						 		  
+	:	fImage   (image)
 	,	fRefData (NULL)
 	
 	{
@@ -45,9 +52,9 @@ dng_tile_buffer::~dng_tile_buffer ()
 /*****************************************************************************/
 
 dng_const_tile_buffer::dng_const_tile_buffer (const dng_image &image,
-											  const dng_rect &tile)
-											  
-	:	dng_tile_buffer (image, tile, false)
+						 		  			  const dng_rect &tile)
+						 		  			  
+	: 	dng_tile_buffer (image, tile, false)
 	
 	{
 	
@@ -63,9 +70,9 @@ dng_const_tile_buffer::~dng_const_tile_buffer ()
 /*****************************************************************************/
 
 dng_dirty_tile_buffer::dng_dirty_tile_buffer (dng_image &image,
-											  const dng_rect &tile)
-											  
-	:	dng_tile_buffer (image, tile, true)
+						 		  			  const dng_rect &tile)
+						 		  			  
+	: 	dng_tile_buffer (image, tile, true)
 	
 	{
 	
@@ -81,11 +88,11 @@ dng_dirty_tile_buffer::~dng_dirty_tile_buffer ()
 /*****************************************************************************/
 
 dng_image::dng_image (const dng_rect &bounds,
-					  uint32 planes,
-					  uint32 pixelType)
+				      uint32 planes,
+				      uint32 pixelType)
 
-	:	fBounds	   (bounds)
-	,	fPlanes	   (planes)
+	: 	fBounds    (bounds)
+	,	fPlanes    (planes)
 	,	fPixelType (pixelType)
 	
 	{
@@ -100,19 +107,6 @@ dng_image::dng_image (const dng_rect &bounds,
 		#endif
 		
 		ThrowBadFormat ();
-		
-		}
-
-	// Allow up to 2 * kMaxImageSide to deal with intermediate image objects
-	// (e.g., rotated and padded).
-
-	static const uint32 kLimit = 2 * kMaxImageSide;
-
-	if (bounds.W () > kLimit ||
-		bounds.H () > kLimit)
-		{
-		
-		ThrowBadFormat ("dng_image bounds too large");
 		
 		}
 		
@@ -238,9 +232,9 @@ void dng_image::DoGet (dng_pixel_buffer &buffer) const
 		dng_const_tile_buffer tileBuffer (*this, tile);
 		
 		buffer.CopyArea (tileBuffer,
-						 tile,
-						 buffer.fPlane,
-						 buffer.fPlanes);
+				  		 tile,
+				  		 buffer.fPlane,
+				  		 buffer.fPlanes);
 		
 		}
 	
@@ -261,9 +255,9 @@ void dng_image::DoPut (const dng_pixel_buffer &buffer)
 		dng_dirty_tile_buffer tileBuffer (*this, tile);
 		
 		tileBuffer.CopyArea (buffer,
-							 tile,
-							 buffer.fPlane,
-							 buffer.fPlanes);
+				  		     tile,
+				  		     buffer.fPlane,
+				  		     buffer.fPlanes);
 		
 		}
 	
@@ -272,8 +266,8 @@ void dng_image::DoPut (const dng_pixel_buffer &buffer)
 /*****************************************************************************/
 
 void dng_image::GetRepeat (dng_pixel_buffer &buffer,
-						   const dng_rect &srcArea,
-						   const dng_rect &dstArea) const
+				           const dng_rect &srcArea,
+				           const dng_rect &dstArea) const
 	{
 	
 	// If we already have the entire srcArea in the
@@ -299,12 +293,12 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 		// Find pattern phase at top-left corner of destination area.
 		
 		dng_point phase = dng_pixel_buffer::RepeatPhase (srcArea,
-														 dstArea);
+													     dstArea);
 			
 		// Find new source area at top-left of dstArea.
 		
 		dng_rect newArea = srcArea + (dstArea.TL () -
-									  srcArea.TL ());
+								      srcArea.TL ());
 										 
 		// Find quadrant split coordinates.
 		
@@ -314,10 +308,10 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 		// Top-left quadrant.
 		
 		dng_rect dst1 (dng_rect (newArea.t,
-								 newArea.l,
-								 splitV,
-								 splitH) & dstArea);
-						
+					   			 newArea.l,
+					   			 splitV,
+					   			 splitH) & dstArea);
+					    
 		if (dst1.NotEmpty ())
 			{
 			
@@ -328,9 +322,9 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 								 dng_point (phase.v, phase.h));
 			
 			temp.fData = buffer.DirtyPixel (dst1.t,
-											dst1.l,
-											buffer.fPlane);
-											
+									        dst1.l,
+									        buffer.fPlane);
+									        
 			DoGet (temp);
 			
 			}
@@ -352,9 +346,9 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 								 dng_point (phase.v, -phase.h));
 			
 			temp.fData = buffer.DirtyPixel (dst2.t,
-											dst2.l,
-											buffer.fPlane);
-											
+									        dst2.l,
+									        buffer.fPlane);
+									        
 			DoGet (temp);
 			
 			}
@@ -376,9 +370,9 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 								 dng_point (-phase.v, phase.h));
 			
 			temp.fData = buffer.DirtyPixel (dst3.t,
-											dst3.l,
-											buffer.fPlane);
-											
+									        dst3.l,
+									        buffer.fPlane);
+									        
 			DoGet (temp);
 			
 			}
@@ -400,9 +394,9 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 								 dng_point (-phase.v, -phase.h));
 			
 			temp.fData = buffer.DirtyPixel (dst4.t,
-											dst4.l,
-											buffer.fPlane);
-											
+									        dst4.l,
+									        buffer.fPlane);
+									        
 			DoGet (temp);
 			
 			} 
@@ -419,9 +413,9 @@ void dng_image::GetRepeat (dng_pixel_buffer &buffer,
 /*****************************************************************************/
 
 void dng_image::GetEdge (dng_pixel_buffer &buffer,
-						 edge_option edgeOption,
-						 const dng_rect &srcArea,
-						 const dng_rect &dstArea) const
+					     edge_option edgeOption,
+				         const dng_rect &srcArea,
+				         const dng_rect &dstArea) const
 	{
 	
 	switch (edgeOption)
@@ -468,12 +462,12 @@ void dng_image::GetEdge (dng_pixel_buffer &buffer,
 				
 			dng_pixel_buffer buffer2 (buffer);
 			
-			buffer2.fPlane	= buffer.fPlanes - 1;
+			buffer2.fPlane  = buffer.fPlanes - 1;
 			buffer2.fPlanes = 1;
 			
 			buffer2.fData = buffer.DirtyPixel (buffer2.fArea.t,
-											   buffer2.fArea.l,
-											   buffer2.fPlane);
+										  	   buffer2.fArea.l,
+										  	   buffer2.fPlane);
 										  
 			GetEdge (buffer2,
 					 edge_zero,
@@ -483,7 +477,7 @@ void dng_image::GetEdge (dng_pixel_buffer &buffer,
 			break;
 			
 			}
-
+			
 		default:
 			{
 			
@@ -497,188 +491,10 @@ void dng_image::GetEdge (dng_pixel_buffer &buffer,
 		
 /*****************************************************************************/
 
-static void WrapLeft (dng_pixel_buffer &buffer,
-					  const dng_image &image,
-					  const dng_rect &dstArea,
-					  const int32 srcTop,
-					  const int32 srcBottom)
-	{
-
-	const dng_rect imageBounds = image.Bounds ();
-	
-	int32 remainingPixels = (int32) dstArea.W ();
-
-	int32 maxPixelsPerIter = (int32) imageBounds.W ();
-
-	int32 dstLeft = Min_int32 (imageBounds.l, dstArea.r);
-
-	DNG_REQUIRE (imageBounds.W () > 0, "WrapLeft: imageBounds.W");
-
-	int32 dstLeftPhase = (imageBounds.l - dstLeft) % imageBounds.W ();
-
-	while (remainingPixels > 0)
-		{
-
-		int32 srcRight = imageBounds.r - dstLeftPhase;
-
-		int32 pixelCount = Min_int32 (remainingPixels,
-									  maxPixelsPerIter - dstLeftPhase);
-
-		dstLeft -= pixelCount;
-					
-		dng_rect srcArea (srcTop,
-						  srcRight - pixelCount,
-						  srcBottom,
-						  srcRight);
-
-		auto tmpBuffer = buffer;
-
-		void *ptr = tmpBuffer.DirtyPixel (dstArea.t,
-										  dstLeft);
-
-		tmpBuffer.fArea = srcArea;
-
-		tmpBuffer.fData = ptr;
-
-		image.Get (tmpBuffer,
-				   dng_image::edge_none);
-
-		remainingPixels -= pixelCount;
-
-		dstLeftPhase = 0; // Only valid/needed if remainingPixels > 0.
-
-		}	
-	
-	}
-
-/*****************************************************************************/
-
-static void WrapRight (dng_pixel_buffer &buffer,
-					   const dng_image &image,
-					   const dng_rect &dstArea,
-					   const int32 srcTop,
-					   const int32 srcBottom)
-	{
-
-	const dng_rect imageBounds = image.Bounds ();
-	
-	int32 remainingPixels = (int32) dstArea.W ();
-
-	int32 maxPixelsPerIter = (int32) imageBounds.W ();
-
-	int32 dstLeft = Max_int32 (imageBounds.r, dstArea.l);
-
-	DNG_REQUIRE (imageBounds.W () > 0, "WrapRight: imageBounds.W");
-
-	int32 dstLeftPhase = (dstLeft - imageBounds.r) % imageBounds.W ();
-
-	while (remainingPixels > 0)
-		{
-
-		int32 srcLeft = imageBounds.l + dstLeftPhase;
-
-		int32 pixelCount = Min_int32 (remainingPixels,
-									  maxPixelsPerIter - dstLeftPhase);
-
-		dng_rect srcArea (srcTop,
-						  srcLeft,
-						  srcBottom,
-						  srcLeft + pixelCount);
-
-		auto tmpBuffer = buffer;
-
-		void *ptr = tmpBuffer.DirtyPixel (dstArea.t,
-										  dstLeft);
-
-		tmpBuffer.fArea = srcArea;
-
-		tmpBuffer.fData = ptr;
-
-		image.Get (tmpBuffer,
-				   dng_image::edge_none);
-
-		dstLeft += pixelCount;
-
-		remainingPixels -= pixelCount;
-
-		dstLeftPhase = 0; // Only valid/needed if remainingPixels > 0.
-
-		}
-
-	}
-
-/*****************************************************************************/
-
-static void WrapCornerHorizontal (dng_pixel_buffer &buffer,
-								  const dng_image &image,
-								  const dng_rect &dstArea,
-								  uint32 repeatV,
-								  bool isTop,
-								  bool isLeft)
-	{
-
-	if (dstArea.IsEmpty ())
-		{
-		return;
-		}
-	
-	const dng_rect imageBounds = image.Bounds ();
-	
-	uint32 repeatSize = repeatV;
-
-	repeatSize = Max_uint32 (repeatSize, 1);
-
-	repeatSize = Min_uint32 (repeatSize, imageBounds.H ());
-
-	repeatSize = Min_uint32 (repeatSize, dstArea.H ());
-
-	auto tmpArea = dstArea;
-
-	const int32 iRepeatSize = (int32) repeatSize;
-
-	if (isTop)
-		{
-		tmpArea.t = tmpArea.b - iRepeatSize;
-		}
-
-	else
-		{
-		tmpArea.b = tmpArea.t + iRepeatSize;
-		}
-
-	if (isLeft)
-		{
-
-		WrapLeft (buffer,
-				  image,
-				  tmpArea,
-				  isTop ? (imageBounds.t) : (imageBounds.b - iRepeatSize),
-				  isTop ? (imageBounds.t + iRepeatSize) : (imageBounds.b));
-
-		}
-
-	else
-		{
-		
-		WrapRight (buffer,
-				   image,
-				   tmpArea,
-				   isTop ? (imageBounds.t) : (imageBounds.b - iRepeatSize),
-				   isTop ? (imageBounds.t + iRepeatSize) : (imageBounds.b));
-		
-		}
-	
-	buffer.RepeatArea (tmpArea,
-					   dstArea);
-	
-	}
-
-/*****************************************************************************/
-
 void dng_image::Get (dng_pixel_buffer &buffer,
 					 edge_option edgeOption,
-					 uint32 repeatV,
-					 uint32 repeatH) const
+				     uint32 repeatV,
+				     uint32 repeatH) const
 	{
 	
 	// Find the overlap with the image bounds.
@@ -695,23 +511,13 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		temp.fArea = overlap;
 		
 		temp.fData = buffer.DirtyPixel (overlap.t,
-										overlap.l,
-										buffer.fPlane);
+								   		overlap.l,
+								   		buffer.fPlane);
 	
 		DoGet (temp);
 		
 		}
-
-	// Throw if unsupported edge wrap options are found.
-
-	if (edgeOption == edge_wrap_vertical ||
-		edgeOption == edge_wrap_all)
-		{
 		
-		ThrowNotYetImplemented ("Unsupported edge option");
-		
-		}
-
 	// See if we need to pad the edge values.
 	
 	if ((edgeOption != edge_none) && (overlap != buffer.fArea))
@@ -742,31 +548,14 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaTL.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapCornerHorizontal (buffer,
-									  *this,
-									  areaTL,
-									  repeatV,
-									  true,	 // is top?
-									  true); // is left?
-
-				}
-
-			else
-				{
-
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (fBounds.t,
-								   fBounds.l,
-								   fBounds.t + (int32) repeatV,
-								   fBounds.l + (int32) repeatH),
-						 areaTL);
-
-				}
+			
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (fBounds.t,
+					 		   fBounds.l,
+					 		   fBounds.t + (int32)repeatV,
+					 		   fBounds.l + (int32)repeatH),
+					 areaTL);
 			
 			}
 			
@@ -776,20 +565,13 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaTM.NotEmpty ())
 			{
-
-			edge_option tmpEdgeOption = edgeOption;
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-				tmpEdgeOption = edge_repeat;
-				}
 			
 			GetEdge (buffer,
-					 tmpEdgeOption,
+					 edgeOption,
 					 dng_rect (fBounds.t,
-							   areaTM.l,
-							   fBounds.t + (int32) repeatV,
-							   areaTM.r),
+					 		   areaTM.l,
+					 		   fBounds.t + (int32)repeatV,
+					 		   areaTM.r),
 					 areaTM);
 			
 			}
@@ -800,31 +582,14 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaTR.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapCornerHorizontal (buffer,
-									  *this,
-									  areaTR,
-									  repeatV,
-									  true,	  // is top?
-									  false); // is left?
-
-				}
-
-			else
-				{
 			
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (fBounds.t,
-								   fBounds.r - (int32) repeatH,
-								   fBounds.t + (int32) repeatV,
-								   fBounds.r),
-						 areaTR);
-
-				}
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (fBounds.t,
+					 		   fBounds.r - (int32)repeatH,
+					 		   fBounds.t + (int32)repeatV,
+					 		   fBounds.r),
+					 areaTR);
 			
 			}
 			
@@ -834,30 +599,14 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaLM.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapLeft (buffer,
-						  *this,
-						  areaLM,
-						  areaLM.t,
-						  areaLM.b);
-
-				}
-
-			else
-				{
 			
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (areaLM.t,
-								   fBounds.l,
-								   areaLM.b,
-								   fBounds.l + (int32) repeatH),
-						 areaLM);
-
-				}
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (areaLM.t,
+					 		   fBounds.l,
+					 		   areaLM.b,
+					 		   fBounds.l + (int32)repeatH),
+					 areaLM);
 			
 			}
 		
@@ -867,30 +616,14 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaRM.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapRight (buffer,
-						   *this,
-						   areaRM,
-						   areaRM.t,
-						   areaRM.b);
-
-				}
-
-			else
-				{
 			
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (areaRM.t,
-								   fBounds.r - (int32) repeatH,
-								   areaRM.b,
-								   fBounds.r),
-						 areaRM);
-
-				}
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (areaRM.t,
+					 		   fBounds.r - (int32)repeatH,
+					 		   areaRM.b,
+					 		   fBounds.r),
+					 areaRM);
 			
 			}
 		
@@ -900,32 +633,15 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaBL.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapCornerHorizontal (buffer,
-									  *this,
-									  areaBL,
-									  repeatV,
-									  false, // is top?
-									  true); // is left?
-
-				}
-
-			else
-				{
-
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (fBounds.b - (int32) repeatV,
-								   fBounds.l,
-								   fBounds.b,
-								   fBounds.l + (int32) repeatH),
-						 areaBL);
-
-				}
-
+			
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (fBounds.b - (int32)repeatV,
+					 		   fBounds.l,
+					 		   fBounds.b,
+					 		   fBounds.l + (int32)repeatH),
+					 areaBL);
+			
 			}
 			
 		// Bottom middle.
@@ -935,19 +651,12 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		if (areaBM.NotEmpty ())
 			{
 			
-			edge_option tmpEdgeOption = edgeOption;
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-				tmpEdgeOption = edge_repeat;
-				}
-
 			GetEdge (buffer,
-					 tmpEdgeOption,
-					 dng_rect (fBounds.b - (int32) repeatV,
-							   areaBM.l,
-							   fBounds.b,
-							   areaBM.r),
+					 edgeOption,
+					 dng_rect (fBounds.b - (int32)repeatV,
+					 		   areaBM.l,
+					 		   fBounds.b,
+					 		   areaBM.r),
 					 areaBM);
 			
 			}
@@ -958,31 +667,14 @@ void dng_image::Get (dng_pixel_buffer &buffer,
 		
 		if (areaBR.NotEmpty ())
 			{
-
-			if (edgeOption == edge_wrap_horizontal)
-				{
-
-				WrapCornerHorizontal (buffer,
-									  *this,
-									  areaBR,
-									  repeatV,
-									  false,  // is top?
-									  false); // is left?
-
-				}
-
-			else
-				{
-
-				GetEdge (buffer,
-						 edgeOption,
-						 dng_rect (fBounds.b - (int32) repeatV,
-								   fBounds.r - (int32) repeatH,
-								   fBounds.b,
-								   fBounds.r),
-						 areaBR);
-
-				}
+			
+			GetEdge (buffer,
+					 edgeOption,
+					 dng_rect (fBounds.b - (int32)repeatV,
+					 		   fBounds.r - (int32)repeatH,
+					 		   fBounds.b,
+					 		   fBounds.r),
+					 areaBR);
 			
 			}
 			
@@ -1007,8 +699,8 @@ void dng_image::Put (const dng_pixel_buffer &buffer)
 		temp.fArea = overlap;
 		
 		temp.fData = (void *) buffer.ConstPixel (overlap.t,
-												 overlap.l,
-												 buffer.fPlane);
+								   		 		 overlap.l,
+								   		 		 buffer.fPlane);
 												 
 		// Move the overlapping planes.
 												 
@@ -1056,25 +748,11 @@ void dng_image::Rotate (const dng_orientation &orientation)
 		
 /*****************************************************************************/
 
-void dng_image::Offset (const dng_point &offset)
-	{
-	
-	if (offset != dng_point (0, 0))
-		{
-		
-		ThrowProgramError ("Offset is not support by this dng_image subclass");
-		
-		}
-	
-	}
-		
-/*****************************************************************************/
-
-void dng_image::DoCopyArea (const dng_image &src,
-							const dng_rect &area,
-							uint32 srcPlane,
-							uint32 dstPlane,
-							uint32 planes)
+void dng_image::CopyArea (const dng_image &src,
+						  const dng_rect &area,
+						  uint32 srcPlane,
+						  uint32 dstPlane,
+						  uint32 planes)
 	{
 
 	if (&src == this)
@@ -1128,7 +806,7 @@ bool dng_image::EqualArea (const dng_image &src,
 			{
 
 			dng_const_tile_buffer destTile (*this, srcTileArea);
-			dng_const_tile_buffer srcTile  (src	 , srcTileArea);
+			dng_const_tile_buffer srcTile  (src  , srcTileArea);
 
 			if (!destTile.EqualArea (srcTile, srcTileArea, plane, planes))
 				{

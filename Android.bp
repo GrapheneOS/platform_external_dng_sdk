@@ -43,99 +43,12 @@ license {
 
 cc_defaults {
     name: "libdng_sdk-defaults",
-    cflags: [
-        "-DUNIX_ENV=1",
-        "-DqDNGBigEndian=0",
-        "-DqDNGThreadSafe=1",
-        "-DqDNGUseLibJPEG=1",
-        "-DqDNGUseXMP=1", // not actually optional anymore :/
-        "-DqDNGValidateTarget=1",
-        "-DqDNGUsingSanitizer=1",
-        "-Werror",
-        "-Wsign-compare",
-        "-Wno-reorder",
-        "-Wframe-larger-than=20000",
-
-        // Ignore unused parameters.
-        "-Wno-unused-parameter",
-
-        // Some integral return types are annotated with "const."
-        "-Wno-ignored-qualifiers",
-
-        // dng_host.cpp is triggering this, clang isn't matching the `// Fall through` comments
-        // that are there but not quite in the right syntax
-        "-Wno-implicit-fallthrough",
-    ],
-
-    rtti: true,
-    cppflags: ["-fexceptions"],
-
-    sanitize: {
-        misc_undefined: [
-            "unsigned-integer-overflow",
-            "signed-integer-overflow",
-        ],
-    },
-
-    target: {
-        host_linux: {
-            cflags: [
-                "-DqLinux=1",
-            ],
-        },
-        android: {
-            cflags: [
-                "-DqAndroid=1",
-            ],
-        },
-    },
-}
-
-cc_library {
-    name: "libdng_sdk",
-    host_supported: true,
-    sdk_version: "current",
-    defaults: ["libdng_sdk-defaults"],
-
-    cflags: ["-DqDNGValidate=0"],
-
-    shared_libs: [
-        "libz",
-        "libjpeg",
-        "libexpat",
-    ],
-
-    shared: {
-        shared_libs: [
-            "libjxl",
-        ],
-        export_shared_lib_headers: [
-            "libjxl",
-        ],
-    },
-
-    static: {
-        whole_static_libs: [
-            "libjxl",
-            "libexpat"
-        ],
-        export_static_lib_headers: [
-            "libjxl",
-        ],
-    },
-
-    whole_static_libs: [
-        "xmp_toolkit_sdk",
-    ],
-
     srcs: [
         "source/dng_1d_function.cpp",
         "source/dng_1d_table.cpp",
         "source/dng_abort_sniffer.cpp",
         "source/dng_area_task.cpp",
         "source/dng_bad_pixels.cpp",
-        "source/dng_big_table.cpp",
-        "source/dng_bmff.cpp",
         "source/dng_bottlenecks.cpp",
         "source/dng_camera_profile.cpp",
         "source/dng_color_space.cpp",
@@ -157,12 +70,9 @@ cc_library {
         "source/dng_iptc.cpp",
         "source/dng_jpeg_image.cpp",
         "source/dng_jpeg_memory_source.cpp",
-        "source/dng_jxl.cpp",
         "source/dng_lens_correction.cpp",
         "source/dng_linearization_info.cpp",
-        "source/dng_local_string.cpp",
         "source/dng_lossless_jpeg.cpp",
-        "source/dng_lossless_jpeg_shared.cpp",
         "source/dng_matrix.cpp",
         "source/dng_memory.cpp",
         "source/dng_memory_stream.cpp",
@@ -197,9 +107,51 @@ cc_library {
         "source/dng_tile_iterator.cpp",
         "source/dng_tone_curve.cpp",
         "source/dng_utils.cpp",
-        "source/dng_xmp.cpp",
-        "source/dng_xmp_sdk.cpp",
         "source/dng_xy_coord.cpp",
+        "source/dng_xmp.cpp",
+    ],
+    cflags: [
+        "-DUNIX_ENV=1",
+        "-DqDNGBigEndian=0",
+        "-DqDNGThreadSafe=1",
+        "-DqDNGUseLibJPEG=1",
+        "-DqDNGUseXMP=0",
+        "-DqDNGValidateTarget=1",
+        "-DqAndroid=1",
+        "-Werror",
+        "-Wsign-compare",
+        "-Wno-reorder",
+        "-Wframe-larger-than=20000",
+
+        // Ignore unused parameters.
+        "-Wno-unused-parameter",
+
+        // Some integral return types are annotated with "const."
+        "-Wno-ignored-qualifiers",
+    ],
+
+    rtti: true,
+    cppflags: ["-fexceptions"],
+
+    sanitize: {
+        misc_undefined: [
+            "unsigned-integer-overflow",
+            "signed-integer-overflow",
+        ],
+    },
+}
+
+cc_library {
+    name: "libdng_sdk",
+    host_supported: true,
+    vendor_available: true,
+    defaults: ["libdng_sdk-defaults"],
+
+    cflags: ["-DqDNGValidate=0"],
+
+    shared_libs: [
+        "libz",
+        "libjpeg",
     ],
 
     target: {
@@ -211,9 +163,18 @@ cc_library {
                 "-framework AppKit",
             ],
         },
+        windows: {
+            enabled: true,
+            cflags: [
+                "-D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR",
+                "-Wno-null-arithmetic",
+                "-Wno-sign-compare",
+                "-Wno-tautological-pointer-compare",
+                "-Wno-unknown-pragmas",
+            ],
+            static_libs: ["libcompiler_rt-extras"],
+        },
     },
-
-    stl: "c++_shared",
 
     export_include_dirs: ["source"],
 }
@@ -229,33 +190,17 @@ cc_library_static {
 
     cflags: ["-DqDNGValidate=1"],
 
-    static_libs: [
-        "libjpeg_static_ndk",
-        "libjxl",
-    ],
-
+    static_libs: ["libjpeg_static_ndk"],
     shared_libs: ["libz"],
-
-    whole_static_libs: [
-        "libdng_sdk",
-    ],
 
     export_include_dirs: ["source"],
 
-    sdk_version: "current",
-    stl: "c++_shared",
+    sdk_version: "24",
+    stl: "c++_static",
 }
 
 // dng sdk unittests for target
 // ========================================================
-
-/*
-This doesn't build anymore because DNG 1.7.1 has conflicts
-between qDNGValidate=1, which is required for dng_validate.cpp,
-and qAndroid=1.
-
-Currently nobody relies on this being available, so rather than
-forking to deal with this mess just turn it off
 
 cc_binary {
     name: "dng_validate",
@@ -267,11 +212,24 @@ cc_binary {
     shared_libs: [
         "libz",
         "libjpeg",
-        "libjxl",
+    ],
+}
+
+cc_binary_host {
+    name: "dng_validate_host",
+    defaults: ["libdng_sdk-defaults"],
+    srcs: ["source/dng_validate.cpp"],
+
+    cflags: ["-DqDNGValidate=1"],
+
+    shared_libs: [
+        "libz",
+        "libjpeg",
     ],
 
-    static_libs: [
-        "libdng_sdk",
-    ]
+    target: {
+        darwin: {
+            enabled: false, // b/67474260
+        },
+    },
 }
-*/
