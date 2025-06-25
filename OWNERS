@@ -1,2 +1,5 @@
-adaubert@google.com # legacy, only for compliance reasons still in place.
+# Bug component: 1075130
+include platform/frameworks/base:/graphics/java/android/graphics/OWNERS
+
+adaubert@google.com #{LAST_RESORT_SUGGESTION}
 nchusid@google.com

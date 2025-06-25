@@ -1,15 +1,10 @@
 /*****************************************************************************/
-// Copyright 2006-2008 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_color_spec.cpp#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
 
 #include "dng_color_spec.h"
 
@@ -25,14 +20,14 @@
 /*****************************************************************************/
 
 dng_matrix_3by3 MapWhiteMatrix (const dng_xy_coord &white1,
-						        const dng_xy_coord &white2)
+								const dng_xy_coord &white2)
 	{
 	
 	// Use the linearized Bradford adaptation matrix.
 	
 	dng_matrix_3by3 Mb ( 0.8951,  0.2664, -0.1614,
-		 		        -0.7502,  1.7135,  0.0367,
-		  			     0.0389, -0.0685,  1.0296);
+						-0.7502,  1.7135,  0.0367,
+						 0.0389, -0.0685,  1.0296);
 	
 	dng_vector_3 w1 = Mb * XYtoXYZ (white1);
 	dng_vector_3 w2 = Mb * XYtoXYZ (white2);
@@ -64,7 +59,8 @@ dng_matrix_3by3 MapWhiteMatrix (const dng_xy_coord &white1,
 /******************************************************************************/
 
 dng_color_spec::dng_color_spec (const dng_negative &negative,
-							    const dng_camera_profile *profile)
+								const dng_camera_profile *profile,
+								bool allowStubbed)
 								
 	:	fChannels (negative.ColorChannels ())
 	
@@ -73,15 +69,19 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 	
 	,	fColorMatrix1 ()
 	,	fColorMatrix2 ()
+	,	fColorMatrix3 ()
 	
 	,	fForwardMatrix1 ()
 	,	fForwardMatrix2 ()
+	,	fForwardMatrix3 ()
 	
 	,	fReductionMatrix1 ()
 	,	fReductionMatrix2 ()
+	,	fReductionMatrix3 ()
 	
 	,	fCameraCalibration1 ()
 	,	fCameraCalibration2 ()
+	,	fCameraCalibration3 ()
 	
 	,	fAnalogBalance ()
 	
@@ -102,25 +102,38 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 			ThrowBadFormat ();
 			}
 			
-		if (profile->WasStubbed ())
+		if (profile->WasStubbed () && !allowStubbed)
 			{
 			ThrowProgramError ("Using stubbed profile");
 			}
-		
+
 		fTemperature1 = profile->CalibrationTemperature1 ();
 		fTemperature2 = profile->CalibrationTemperature2 ();
-		
+
+		fLight1 = dng_illuminant_data (profile->CalibrationIlluminant1 (),
+									   &profile->IlluminantData1 ());
+									  
+		fLight2 = dng_illuminant_data (profile->CalibrationIlluminant2 (),
+									   &profile->IlluminantData2 ());
+									  
+		fLight3 = dng_illuminant_data (profile->CalibrationIlluminant3 (),
+									   &profile->IlluminantData3 ());
+									  
 		fColorMatrix1 = profile->ColorMatrix1 ();
 		fColorMatrix2 = profile->ColorMatrix2 ();
+		fColorMatrix3 = profile->ColorMatrix3 ();
 				
 		fForwardMatrix1 = profile->ForwardMatrix1 ();
 		fForwardMatrix2 = profile->ForwardMatrix2 ();
+		fForwardMatrix3 = profile->ForwardMatrix3 ();
 				
 		fReductionMatrix1 = profile->ReductionMatrix1 ();
 		fReductionMatrix2 = profile->ReductionMatrix2 ();
+		fReductionMatrix3 = profile->ReductionMatrix3 ();
 		
 		fCameraCalibration1.SetIdentity (fChannels);
 		fCameraCalibration2.SetIdentity (fChannels);
+		fCameraCalibration3.SetIdentity (fChannels);
 
 		if (negative. CameraCalibrationSignature () ==
 			profile->ProfileCalibrationSignature ())
@@ -142,6 +155,14 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 				
 				}
 							
+			if (negative.CameraCalibration3 ().Rows () == fChannels &&
+				negative.CameraCalibration3 ().Cols () == fChannels)
+				{
+				
+				fCameraCalibration3 = negative.CameraCalibration3 ();
+				
+				}
+							
 			}
 
 		fAnalogBalance = dng_matrix (fChannels, fChannels);
@@ -156,25 +177,38 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 		dng_camera_profile::NormalizeForwardMatrix (fForwardMatrix1);
 		
 		fColorMatrix1 = fAnalogBalance * fCameraCalibration1 * fColorMatrix1;
-								
+
 		if (!profile->HasColorMatrix2 () ||
 				fTemperature1 <= 0.0 ||
 				fTemperature2 <= 0.0 ||
 				fTemperature1 == fTemperature2)
 			{
+
+			// Single-illuminant profile. Use only the 1st set of matrices.
 			
 			fTemperature1 = 5000.0;
 			fTemperature2 = 5000.0;
-			
-			fColorMatrix2       = fColorMatrix1;
-			fForwardMatrix2     = fForwardMatrix1;
-			fReductionMatrix2   = fReductionMatrix1;
+
+			fColorMatrix2		= fColorMatrix1;
+			fForwardMatrix2		= fForwardMatrix1;
+			fReductionMatrix2	= fReductionMatrix1;
 			fCameraCalibration2 = fCameraCalibration1;
+			
+			fColorMatrix3		= fColorMatrix1;
+			fForwardMatrix3		= fForwardMatrix1;
+			fReductionMatrix3	= fReductionMatrix1;
+			fCameraCalibration3 = fCameraCalibration1;
+
+			// We'll use the single-illuminant model.
+
+			fNumIlluminants = 1;
 			
 			}
 			
-		else
+		else if (!profile->HasColorMatrix3 ())
 			{
+
+			// Dual-illuminant profile.
 			
 			dng_camera_profile::NormalizeForwardMatrix (fForwardMatrix2);
 			
@@ -184,8 +218,8 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 											
 			if (fTemperature1 > fTemperature2)
 				{
-				
-				real64 temp   = fTemperature1;
+
+				real64 temp	  = fTemperature1;
 				fTemperature1 = fTemperature2;
 				fTemperature2 = temp;
 				
@@ -193,20 +227,39 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 				fColorMatrix1 = fColorMatrix2;
 				fColorMatrix2 = T;
 				
-				T               = fForwardMatrix1;
+				T				= fForwardMatrix1;
 				fForwardMatrix1 = fForwardMatrix2;
 				fForwardMatrix2 = T;
 				
-				T                 = fReductionMatrix1;
+				T				  = fReductionMatrix1;
 				fReductionMatrix1 = fReductionMatrix2;
 				fReductionMatrix2 = T;
 				
-				T                   = fCameraCalibration1;
+				T					= fCameraCalibration1;
 				fCameraCalibration1 = fCameraCalibration2;
 				fCameraCalibration2 = T;
 				
 				}
+
+			// We'll use the dual-illuminant model.
+
+			fNumIlluminants = 2;
 				
+			}
+
+		else
+			{
+
+			// We'll use the triple-illuminant model.
+			
+			fNumIlluminants = 3;
+			
+			dng_camera_profile::NormalizeForwardMatrix (fForwardMatrix2);
+			dng_camera_profile::NormalizeForwardMatrix (fForwardMatrix3);
+			
+			fColorMatrix2 = fAnalogBalance * fCameraCalibration2 * fColorMatrix2;
+			fColorMatrix3 = fAnalogBalance * fCameraCalibration3 * fColorMatrix3;
+			
 			}
 			
 		}
@@ -217,9 +270,41 @@ dng_color_spec::dng_color_spec (const dng_negative &negative,
 
 dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 											dng_matrix *forwardMatrix,
-									        dng_matrix *reductionMatrix,
+											dng_matrix *reductionMatrix,
 											dng_matrix *cameraCalibration)
 	{
+
+	if (fNumIlluminants <= 2)
+		{
+		
+		return FindXYZtoCamera_SingleOrDual (white,
+											 forwardMatrix,
+											 reductionMatrix,
+											 cameraCalibration);
+		
+		}
+
+	else
+		{
+		
+		return FindXYZtoCamera_Triple (white,
+									   forwardMatrix,
+									   reductionMatrix,
+									   cameraCalibration);
+		
+		}
+
+	}
+
+/*****************************************************************************/
+
+dng_matrix dng_color_spec::FindXYZtoCamera_SingleOrDual (const dng_xy_coord &white,
+														 dng_matrix *forwardMatrix,
+														 dng_matrix *reductionMatrix,
+														 dng_matrix *cameraCalibration)
+	{
+
+	DNG_REQUIRE (fNumIlluminants <= 2, "Bad fNumIlluminants");
 	
 	// Convert to temperature/offset space.
 	
@@ -240,9 +325,9 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 		
 		real64 invT = 1.0 / td.Temperature ();
 		
-		g = (invT                  - (1.0 / fTemperature2)) /
-		    ((1.0 / fTemperature1) - (1.0 / fTemperature2));
-		    
+		g = (invT				   - (1.0 / fTemperature2)) /
+			((1.0 / fTemperature1) - (1.0 / fTemperature2));
+			
 		}
 		
 	// Interpolate the color matrix.
@@ -256,7 +341,7 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 		colorMatrix = fColorMatrix2;
 		
 	else
-		colorMatrix = (g      ) * fColorMatrix1 +
+		colorMatrix = (g	  ) * fColorMatrix1 +
 					  (1.0 - g) * fColorMatrix2;
 					   
 	// Interpolate forward matrix, if any.
@@ -277,7 +362,7 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 				*forwardMatrix = fForwardMatrix2;
 				
 			else
-				*forwardMatrix = (g      ) * fForwardMatrix1 +
+				*forwardMatrix = (g		 ) * fForwardMatrix1 +
 								 (1.0 - g) * fForwardMatrix2;
 			
 			}
@@ -323,7 +408,7 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 				*reductionMatrix = fReductionMatrix2;
 				
 			else
-				*reductionMatrix = (g      ) * fReductionMatrix1 +
+				*reductionMatrix = (g	   ) * fReductionMatrix1 +
 								   (1.0 - g) * fReductionMatrix2;
 			
 			}
@@ -363,8 +448,8 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 			*cameraCalibration = fCameraCalibration2;
 			
 		else
-			*cameraCalibration = (g      ) * fCameraCalibration1 +
-							     (1.0 - g) * fCameraCalibration2;
+			*cameraCalibration = (g		 ) * fCameraCalibration1 +
+								 (1.0 - g) * fCameraCalibration2;
 						
 		}
 			
@@ -372,6 +457,58 @@ dng_matrix dng_color_spec::FindXYZtoCamera (const dng_xy_coord &white,
 		
 	return colorMatrix;
 		
+	}
+
+/*****************************************************************************/
+
+dng_matrix dng_color_spec::FindXYZtoCamera_Triple (const dng_xy_coord &white,
+												   dng_matrix *forwardMatrix,
+												   dng_matrix *reductionMatrix,
+												   dng_matrix *cameraCalibration)
+	{
+
+	DNG_REQUIRE (fNumIlluminants == 3, "Bad fNumIlluminants");
+
+	real64 w1, w2, w3;
+
+	CalculateTripleIlluminantWeights (white,
+									  w1,
+									  w2,
+									  w3);
+
+	if (forwardMatrix)
+		{
+
+		*forwardMatrix = ((w1 * fForwardMatrix1) +
+						  (w2 * fForwardMatrix2) +
+						  (w3 * fForwardMatrix3));
+
+		}
+
+	if (reductionMatrix)
+		{
+
+		*reductionMatrix = ((w1 * fReductionMatrix1) +
+							(w2 * fReductionMatrix2) +
+							(w3 * fReductionMatrix3));
+
+		}
+
+	if (cameraCalibration)
+		{
+
+		*cameraCalibration = ((w1 * fCameraCalibration1) +
+							  (w2 * fCameraCalibration2) +
+							  (w3 * fCameraCalibration3));
+
+		}
+
+	dng_matrix colorMatrix = ((w1 * fColorMatrix1) +
+							  (w2 * fColorMatrix2) +
+							  (w3 * fColorMatrix3));
+
+	return colorMatrix;
+	
 	}
 
 /*****************************************************************************/
@@ -394,7 +531,7 @@ void dng_color_spec::SetWhiteXY (const dng_xy_coord &white)
 		
 		}
 	
-	// Interpolate an matric values for this white point.
+	// Interpolate matrix values for this white point.
 	
 	dng_matrix colorMatrix;
 	dng_matrix forwardMatrix;
@@ -411,10 +548,12 @@ void dng_color_spec::SetWhiteXY (const dng_xy_coord &white)
 	fCameraWhite = colorMatrix * XYtoXYZ (fWhiteXY);
 
 	real64 cameraWhiteMaxEntry = MaxEntry (fCameraWhite);
-	if (cameraWhiteMaxEntry == 0)
+
+	if (cameraWhiteMaxEntry == 0.0)
 		{
-		 ThrowBadFormat ();
+		ThrowBadFormat ();
 		}
+	
 	real64 whiteScale = 1.0 / cameraWhiteMaxEntry;
 	
 	for (uint32 j = 0; j < fChannels; j++)
@@ -434,11 +573,12 @@ void dng_color_spec::SetWhiteXY (const dng_xy_coord &white)
 	fPCStoCamera = colorMatrix * MapWhiteMatrix (PCStoXY (), fWhiteXY);
 		
 	real64 scale = MaxEntry (fPCStoCamera * PCStoXYZ ());
-
+	
 	if (scale == 0)
 		{
-		 ThrowBadFormat ();
+		ThrowBadFormat ();
 		}
+	
 	fPCStoCamera = (1.0 / scale) * fPCStoCamera;
 
 	// If we have a forward matrix, then just use that.
@@ -546,7 +686,7 @@ dng_xy_coord dng_color_spec::NeutralToXY (const dng_vector &neutral)
 			}
 			
 		// If we reach the limit without converging, we are most likely
-		// in a two value oscillation.  So take the average of the last
+		// in a two value oscillation.	So take the average of the last
 		// two estimates and give up.
 			
 		if (pass == kMaxPasses - 1)
@@ -562,6 +702,24 @@ dng_xy_coord dng_color_spec::NeutralToXY (const dng_vector &neutral)
 		}
 		
 	return last;
+	
+	}
+
+/*****************************************************************************/
+
+void dng_color_spec::CalculateTripleIlluminantWeights (const dng_xy_coord &white,
+													   real64 &w1,
+													   real64 &w2,
+													   real64 &w3) const
+	{
+	
+	::CalculateTripleIlluminantWeights (white,
+										fLight1,
+										fLight2,
+										fLight3,
+										w1,
+										w2,
+										w3);
 	
 	}
 			
