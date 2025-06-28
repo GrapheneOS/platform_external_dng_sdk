@@ -1,23 +1,17 @@
 /*****************************************************************************/
-// Copyright 2006 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_orientation.h#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
-/******************************************************************************/
 
 #ifndef __dng_orientation__
 #define __dng_orientation__
 
 /******************************************************************************/
 
+#include "dng_matrix.h"
 #include "dng_types.h"
 
 /******************************************************************************/
@@ -33,19 +27,19 @@ class dng_orientation
 		uint32 fAdobeOrientation;
 
 	public:
+
 		enum
 			{
-			kNormal      = 0,
-			kRotate90CW  = 1,
-			kRotate180   = 2,
+			kNormal		 = 0,
+			kRotate90CW	 = 1,
+			kRotate180	 = 2,
 			kRotate90CCW = 3,
 			kMirror		 = 4,
-			kMirror90CW  = 5,
+			kMirror90CW	 = 5,
 			kMirror180	 = 6,
 			kMirror90CCW = 7,
-			kUnknown     = 8
+			kUnknown	 = 8
 			};
-	
 	
 		dng_orientation ()
 		
@@ -151,6 +145,8 @@ class dng_orientation
 		
 		bool FlipV () const;
 		
+		bool IsMirrored () const;
+		
 		bool operator== (const dng_orientation &b) const
 			{
 			return fAdobeOrientation == b.fAdobeOrientation;
@@ -162,6 +158,33 @@ class dng_orientation
 			}
 		
 		dng_orientation operator- () const;
+		
+		// Be careful when composing orientations using the + and - operators.
+		// In mathematics, the + operator is commutative, namely,
+		//
+		//	 a + b == b + a
+		//
+		// An orientation transform represents a linear transform, so
+		// composing two orientation transforms amounts to a matrix
+		// multiplication, which is associative but NOT commutative.
+		//
+		// For example, suppose we know that A, B, and C are dng_orientation
+		// objects such that
+		//
+		//	 C = A + B
+		//
+		// That is, C is the orientation obtained by applying A then B. If
+		// we're given A and C and want to calculate B, the correct expression
+		// is:
+		//
+		//	 B = -A + C		// correct
+		//
+		// and not
+		//
+		//	 B =  C - A		// incorrect
+		//
+		// On first glance, these appear to be the same expressions but they
+		// are not.
 		
 		dng_orientation operator+ (const dng_orientation &b) const;
 		
@@ -179,6 +202,20 @@ class dng_orientation
 			{
 			*this = *this - b;
 			}
+
+		// If horizontalFirstRow is true, then the x (horizontal h) component
+		// of the transform will be in the first row of the resulting matrix,
+		// and the y (vertical v) component will be in the second row.
+		// 
+		// If horizontalFirstRow is false, then the y (vertical v) component
+		// of the transform will be in the first row of the resulting matrix,
+		// and the x (horizontal h) component will be in the second row.
+
+		bool CalcForwardMatrix3by3 (dng_matrix &matrix,
+									bool horizontalFirstRow) const;
+		
+		bool CalcForwardMatrix4by4 (dng_matrix &matrix,
+									bool horizontalFirstRow) const;
 		
 	};
 
