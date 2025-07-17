@@ -44,7 +44,6 @@ license {
 cc_defaults {
     name: "libdng_sdk-defaults",
     cflags: [
-        "-DUNIX_ENV=1",
         "-DqDNGBigEndian=0",
         "-DqDNGThreadSafe=1",
         "-DqDNGUseLibJPEG=1",
@@ -81,11 +80,19 @@ cc_defaults {
         host_linux: {
             cflags: [
                 "-DqLinux=1",
+                "-DUNIX_ENV=1",
             ],
         },
         android: {
             cflags: [
                 "-DqAndroid=1",
+                "-DUNIX_ENV=1",
+            ],
+        },
+        darwin: {
+            cflags: [
+                "-DqMacOS=1",
+                "-DMAC_ENV=1",
             ],
         },
     },
