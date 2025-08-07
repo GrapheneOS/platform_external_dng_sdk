@@ -49,6 +49,8 @@ cc_defaults {
         "source/dng_abort_sniffer.cpp",
         "source/dng_area_task.cpp",
         "source/dng_bad_pixels.cpp",
+        "source/dng_big_table.cpp",
+        "source/dng_bmff.cpp",
         "source/dng_bottlenecks.cpp",
         "source/dng_camera_profile.cpp",
         "source/dng_color_space.cpp",
@@ -72,7 +74,9 @@ cc_defaults {
         "source/dng_jpeg_memory_source.cpp",
         "source/dng_lens_correction.cpp",
         "source/dng_linearization_info.cpp",
+        "source/dng_local_string.cpp",
         "source/dng_lossless_jpeg.cpp",
+        "source/dng_lossless_jpeg_shared.cpp",
         "source/dng_matrix.cpp",
         "source/dng_memory.cpp",
         "source/dng_memory_stream.cpp",
@@ -107,8 +111,8 @@ cc_defaults {
         "source/dng_tile_iterator.cpp",
         "source/dng_tone_curve.cpp",
         "source/dng_utils.cpp",
-        "source/dng_xy_coord.cpp",
         "source/dng_xmp.cpp",
+        "source/dng_xy_coord.cpp",
     ],
     cflags: [
         "-DUNIX_ENV=1",
@@ -117,7 +121,7 @@ cc_defaults {
         "-DqDNGUseLibJPEG=1",
         "-DqDNGUseXMP=0",
         "-DqDNGValidateTarget=1",
-        "-DqAndroid=1",
+        "-DqDNGUsingSanitizer=1",
         "-Werror",
         "-Wsign-compare",
         "-Wno-reorder",
@@ -128,6 +132,10 @@ cc_defaults {
 
         // Some integral return types are annotated with "const."
         "-Wno-ignored-qualifiers",
+
+        // dng_host.cpp is triggering this, clang isn't matching the `// Fall through` comments
+        // that are there but not quite in the right syntax
+        "-Wno-implicit-fallthrough",
     ],
 
     rtti: true,
@@ -139,12 +147,25 @@ cc_defaults {
             "signed-integer-overflow",
         ],
     },
+
+    target: {
+        host_linux: {
+            cflags: [
+                "-DqLinux=1",
+            ],
+        },
+        android: {
+            cflags: [
+                "-DqAndroid=1",
+            ],
+        },
+    },
 }
 
 cc_library {
     name: "libdng_sdk",
     host_supported: true,
-    vendor_available: true,
+    sdk_version: "current",
     defaults: ["libdng_sdk-defaults"],
 
     cflags: ["-DqDNGValidate=0"],
@@ -164,7 +185,7 @@ cc_library {
             ],
         },
         windows: {
-            enabled: true,
+            enabled: false,
             cflags: [
                 "-D_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR",
                 "-Wno-null-arithmetic",
@@ -175,6 +196,8 @@ cc_library {
             static_libs: ["libcompiler_rt-extras"],
         },
     },
+
+    stl: "c++_shared",
 
     export_include_dirs: ["source"],
 }
@@ -213,23 +236,8 @@ cc_binary {
         "libz",
         "libjpeg",
     ],
-}
 
-cc_binary_host {
-    name: "dng_validate_host",
-    defaults: ["libdng_sdk-defaults"],
-    srcs: ["source/dng_validate.cpp"],
-
-    cflags: ["-DqDNGValidate=1"],
-
-    shared_libs: [
-        "libz",
-        "libjpeg",
-    ],
-
-    target: {
-        darwin: {
-            enabled: false, // b/67474260
-        },
-    },
+    static_libs: [
+        "libdng_sdk",
+    ]
 }
