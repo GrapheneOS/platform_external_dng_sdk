@@ -1,20 +1,19 @@
 /*****************************************************************************/
-// Copyright 2006-2011 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
-/*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_xmp.h#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
 /*****************************************************************************/
 
 #ifndef __dng_xmp__
 #define __dng_xmp__
+
+/*****************************************************************************/
+
+#include "dng_flags.h"
+
+/*****************************************************************************/
 
 #if qDNGUseXMP
 
@@ -36,9 +35,10 @@ class dng_xmp
 		enum
 			{
 			ignoreXMP		= 1,		// Force XMP values to match non-XMP
-			preferXMP 		= 2,		// Prefer XMP values if conflict
+			preferXMP		= 2,		// Prefer XMP values if conflict
 			preferNonXMP	= 4,		// Prefer non-XMP values if conflict
-			removeXMP		= 8			// Remove XMP value after syncing
+			removeXMP		= 8,		// Remove XMP value after syncing
+			requireXMP		= 16		// Require XMP tag even if default
 			};	
 	
 		dng_memory_allocator &fAllocator;
@@ -54,10 +54,15 @@ class dng_xmp
 		virtual ~dng_xmp ();
 		
 		virtual dng_xmp * Clone () const;
+
+		dng_memory_allocator & Allocator () const
+			{
+			return fAllocator;
+			}
 	
 		void Parse (dng_host &host,
 					const void *buffer,
-				    uint32 count);
+					uint32 count);
 
 		dng_memory_block * Serialize (bool asPacket = false,
 									  uint32 targetBytes = 0,
@@ -66,7 +71,7 @@ class dng_xmp
 									  bool compact = true) const;
 									  
 		// Kludge: Due to a bug in Premere Elements 9, we need to pass non-compact XMP
-		// to the host, until we drop support for this Premere version.  This bug
+		// to the host, until we drop support for this Premere version.	 This bug
 		// is fixed in Premere Elements 10 and later.
 											  
 		dng_memory_block * SerializeNonCompact () const
@@ -85,7 +90,12 @@ class dng_xmp
 		void MergeFromJPEG (const dng_xmp &xmp);
 									  
 		bool HasMeta () const;
-		
+
+		void RequireMeta ()
+			{
+			fSDK->RequireMeta ();
+			}
+
 		void * GetPrivateMeta ();
 									  
 		bool Exists (const char *ns,
@@ -95,11 +105,21 @@ class dng_xmp
 
 		bool IteratePaths (IteratePathsCallback *callback,
 						   void *callbackData,
-						   const char *ns = 0,
-						   const char *path = 0);
+						   const char *ns = NULL,
+						   const char *path = NULL,
+						   bool justChildren = false) const;
 
+		void DuplicateSubtree (const dng_xmp &source,
+							   const char *sourceNS,
+							   const char *sourceRoot,
+							   const char *destNS = NULL,
+							   const char *destRoot = NULL);
+
+		void DuplicateNameSpace (const dng_xmp &source,
+								 const char *ns);
+		
 		void Remove (const char *ns,
-				     const char *path);
+					 const char *path);
 
 		void RemoveProperties (const char *ns);
 		
@@ -121,23 +141,24 @@ class dng_xmp
 						const dng_string &s);
 						
 		bool GetStringList (const char *ns,
-						    const char *path,
-						    dng_string_list &list) const;
+							const char *path,
+							dng_string_list &list,
+							dng_abort_sniffer *sniffer = NULL) const;
 				  
 		void SetStringList (const char *ns,
-						    const char *path,
-						    const dng_string_list &list,
-						    bool isBag = false);
+							const char *path,
+							const dng_string_list &list,
+							bool isBag = false);
 						
 		void SetStructField (const char *ns,
 							 const char *path,
-						     const char *fieldNS,
+							 const char *fieldNS,
 							 const char *fieldName,
 							 const dng_string &s);
 
 		void SetStructField (const char *ns,
 							 const char *path,
-						     const char *fieldNS,
+							 const char *fieldNS,
 							 const char *fieldName,
 							 const char *s);
 		
@@ -145,7 +166,7 @@ class dng_xmp
 								const char *path,
 								const char *fieldNS,
 								const char *fieldName);								
-												 				 	 
+																	 
 		bool GetStructField (const char *ns,
 							 const char *path,
 							 const char *fieldNS,
@@ -156,9 +177,18 @@ class dng_xmp
 								const char *path,
 								const dng_string &s);
 
+		void SetLocalString (const char *ns,
+							 const char *path,
+							 const dng_local_string &s);
+								
 		bool GetAltLangDefault (const char *ns,
 								const char *path,
-								dng_string &s) const;
+								dng_string &s,
+								bool silent = false) const;
+								
+		bool GetLocalString (const char *ns,
+							 const char *path,
+							 dng_local_string &s) const;
 								
 		bool GetBoolean (const char *ns,
 						 const char *path,
@@ -186,15 +216,15 @@ class dng_xmp
 						 uint32 x);
 						 
 		bool Get_real64 (const char *ns,
-					     const char *path,
-					     real64 &x) const;
+						 const char *path,
+						 real64 &x) const;
 	
 		void Set_real64 (const char *ns,
-					     const char *path,
-					     real64 x,
-				         uint32 places = 6,
-					     bool trim = true,
-					     bool usePlus = false);
+						 const char *path,
+						 real64 x,
+						 uint32 places = 6,
+						 bool trim = true,
+						 bool usePlus = false);
 
 		bool Get_urational (const char *ns,
 							const char *path,
@@ -215,7 +245,7 @@ class dng_xmp
 		bool GetFingerprint (const char *ns,
 							 const char *path,
 							 dng_fingerprint &print) const;
-					 	 
+						 
 		void SetFingerprint (const char *ns,
 							 const char *path,
 							 const dng_fingerprint &print,
@@ -232,7 +262,7 @@ class dng_xmp
 		void ClearIPTCDigest ();
 		
 		void IngestIPTC (dng_metadata &metadata,
-					     bool xmpIsNewer = false);
+						 bool xmpIsNewer = false);
 			
 		void RebuildIPTC (dng_metadata &metadata,
 						  dng_memory_allocator &allocator,
@@ -244,7 +274,7 @@ class dng_xmp
 							   bool removeFromXMP = false);
 							   
 		void ValidateStringList (const char *ns,
-							     const char *path);
+								 const char *path);
 							   
 		void ValidateMetadata ();
 		
@@ -264,12 +294,12 @@ class dng_xmp
 		void SetOrientation (const dng_orientation &orientation);
 		
 		void SyncOrientation (dng_negative &negative,
-					   		  bool xmpIsMaster);
+							  bool xmpIsMaster);
 			// FIX_ME_API: Backwards compatibility
-					   		  
+							  
 		void SyncOrientation (dng_metadata &metadata,
-					   		  bool xmpIsMaster);
-					   		  
+							  bool xmpIsMaster);
+							  
 		void ClearImageInfo ();
 		
 		void SetImageSize (const dng_point &size);
@@ -287,13 +317,13 @@ class dng_xmp
 								   dng_string &s) const;
 		
 		void ComposeStructFieldPath (const char *ns,
-								     const char *structName,
-								     const char *fieldNS,
+									 const char *structName,
+									 const char *fieldNS,
 									 const char *fieldName,
-								     dng_string &s) const;
+									 dng_string &s) const;
 
 		int32 CountArrayItems (const char *ns,
-		                       const char *path) const;
+							   const char *path) const;
 
 		void AppendArrayItem (const char *ns,
 							  const char *arrayName,
@@ -308,13 +338,13 @@ class dng_xmp
 							 
 		#if qDNGXMPDocOps
 		
-		void DocOpsOpenXMP (const char *srcMIMI);
+		void DocOpsOpenXMP (const char *srcMIME);
 		
-		void DocOpsPrepareForSave (const char *srcMIMI,
-								   const char *dstMIMI,
+		void DocOpsPrepareForSave (const char *srcMIME,
+								   const char *dstMIME,
 								   bool newPath = true);
 								   
-		void DocOpsUpdateMetadata (const char *srcMIMI);
+		void DocOpsUpdateMetadata (const char *srcMIME);
 		
 		#endif
 
@@ -327,8 +357,8 @@ class dng_xmp
 		static uint32 DecodeGPSVersion (const dng_string &s);
 		
 		static dng_string EncodeGPSCoordinate (const dng_string &ref,
-							   				   const dng_urational *coord);
-							   				   
+											   const dng_urational *coord);
+											   
 		static void DecodeGPSCoordinate (const dng_string &s,
 										 dng_string &ref,
 										 dng_urational *coord);
@@ -346,10 +376,10 @@ class dng_xmp
 						 uint32 options = 0);
 						 
 		void SyncStringList (const char *ns,
-						 	 const char *path,
-						 	 dng_string_list &list,
-						 	 bool isBag = false,
-						 	 uint32 options = 0);
+							 const char *path,
+							 dng_string_list &list,
+							 bool isBag = false,
+							 uint32 options = 0);
 
 		bool SyncAltLangDefault (const char *ns,
 								 const char *path,
@@ -360,14 +390,15 @@ class dng_xmp
 						  const char *path,
 						  uint32 &x,
 						  bool isDefault = false,
-						  uint32 options = 0);
+						  uint32 options = 0,
+						  uint32 defaultValue = 0);
 						  
 		void Sync_uint32_array (const char *ns,
-						   		const char *path,
-						   		uint32 *data,
-						   		uint32 &count,
-						   		uint32 maxCount,
-						   		uint32 options = 0);
+								const char *path,
+								uint32 *data,
+								uint32 &count,
+								uint32 maxCount,
+								uint32 options = 0);
 						 
 		void Sync_urational (const char *ns,
 							 const char *path,
@@ -385,12 +416,20 @@ class dng_xmp
 		void SyncFlash (uint32 &flashState,
 						uint32 &flashMask,
 						uint32 options);
+	  
+		void SyncExifDate (const char *ns,
+						   const char *path,
+						   dng_date_time_info &exifDateTime,
+						   bool canRemoveFromXMP,
+						   bool removeFromXMP,
+						   const dng_time_zone &fakeTimeZone);
 						
-		bool DateTimeIsDateOnly (const char *ns,
-							     const char *path);
-
 		virtual void SyncApproximateFocusDistance (dng_exif &exif,
 												   const uint32 readOnly);
+		
+		virtual void SyncLensName (dng_exif &exif);
+		
+		virtual void GenerateDefaultLensName (dng_exif &exif);
 
 	private:
 	
@@ -400,10 +439,12 @@ class dng_xmp
 		
 	};
 	
-#endif
+/*****************************************************************************/
+
+#endif	// qDNGUseXMP
 
 /*****************************************************************************/
 
-#endif
+#endif	// __dng_xmp__
 	
 /*****************************************************************************/
