@@ -1,15 +1,10 @@
 /*****************************************************************************/
-// Copyright 2006-2012 Adobe Systems Incorporated
+// Copyright 2006-2023 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
 /*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_image_writer.h#3 $ */ 
-/* $DateTime: 2012/07/31 22:04:34 $ */
-/* $Change: 840853 $ */
-/* $Author: tknoll $ */
 
 /** \file
  * Support for writing DNG images to files.
@@ -22,17 +17,23 @@
 
 /*****************************************************************************/
 
+#include "dng_area_task.h"
 #include "dng_auto_ptr.h"
 #include "dng_classes.h"
 #include "dng_fingerprint.h"
 #include "dng_memory.h"
+#include "dng_mutex.h"
 #include "dng_point.h"
 #include "dng_rational.h"
+#include "dng_safe_arithmetic.h"
 #include "dng_sdk_limits.h"
 #include "dng_string.h"
 #include "dng_tag_types.h"
 #include "dng_tag_values.h"
 #include "dng_types.h"
+#include "dng_uncopyable.h"
+
+#include <atomic>
 
 /*****************************************************************************/
 
@@ -56,7 +57,7 @@ class dng_resolution
 
 /*****************************************************************************/
 
-class tiff_tag
+class tiff_tag: private dng_uncopyable
 	{
 	
 	protected:
@@ -111,16 +112,12 @@ class tiff_tag
 			return TagTypeSize (Type ()) * Count ();
 			}
 	
+		virtual void SetBigTIFF (bool /* isBigTIFF */)
+			{
+			}
+	
 		virtual void Put (dng_stream &stream) const = 0;
 	
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		tiff_tag (const tiff_tag &tag);
-		
-		tiff_tag & operator= (const tiff_tag &tag);
-					 
 	};
 
 /******************************************************************************/
@@ -135,9 +132,9 @@ class tag_data_ptr: public tiff_tag
 	public:
 	
 		tag_data_ptr (uint16 code,
-				      uint16 type,
-				      uint32 count,
-				      const void *data)
+					  uint16 type,
+					  uint32 count,
+					  const void *data)
 				
 			:	tiff_tag (code, type, count)
 			
@@ -153,14 +150,40 @@ class tag_data_ptr: public tiff_tag
 			
 		virtual void Put (dng_stream &stream) const;
 		
-	private:
+	};
+		
+/******************************************************************************/
+
+class tag_owned_data_ptr: public tag_data_ptr
+	{
 	
-		// Hidden copy constructor and assignment operator.
+	protected:
+	
+		const_dng_memory_block_sptr fBlock;
 		
-		tag_data_ptr (const tag_data_ptr &tag);
-		
-		tag_data_ptr & operator= (const tag_data_ptr &tag);
-					 
+	public:
+	
+		tag_owned_data_ptr (uint16 code,
+							uint16 type,
+							uint32 count,
+							const_dng_memory_block_sptr block)
+				
+			:	tag_data_ptr (code,
+							  type,
+							  count,
+							  block ? block->Buffer () : nullptr)
+			
+			,	fBlock (block)
+			
+			{
+			}
+			
+		void SetBlock (const_dng_memory_block_sptr block)
+			{
+			fBlock = block;
+			SetData (block ? block->Buffer () : nullptr);
+			}
+			
 	};
 		
 /******************************************************************************/
@@ -175,8 +198,8 @@ class tag_string: public tiff_tag
 	public:
 	
 		tag_string (uint16 code,
-				    const dng_string &s,
-				    bool forceASCII = true);
+					const dng_string &s,
+					bool forceASCII = true);
 
 		virtual void Put (dng_stream &stream) const;
 	
@@ -238,8 +261,8 @@ class tag_uint8_ptr: public tag_data_ptr
 	public:
 	
 		tag_uint8_ptr (uint16 code,
-			    	   const uint8 *data,
-			    	   uint32 count = 1)
+					   const uint8 *data,
+					   uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttByte, count, data)
 			
@@ -273,6 +296,11 @@ class tag_uint16: public tag_data_ptr
 			{
 			fValue = value;
 			}
+			
+		uint16 Get () const
+			{
+			return fValue;
+			}
 		
 	};
 
@@ -284,8 +312,8 @@ class tag_int16_ptr: public tag_data_ptr
 	public:
 	
 		tag_int16_ptr (uint16 code,
-				       const int16 *data,
-				       uint32 count = 1)
+					   const int16 *data,
+					   uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttSShort, count, data)
 			
@@ -302,8 +330,8 @@ class tag_uint16_ptr: public tag_data_ptr
 	public:
 	
 		tag_uint16_ptr (uint16 code,
-				        const uint16 *data,
-				        uint32 count = 1)
+						const uint16 *data,
+						uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttShort, count, data)
 			
@@ -324,7 +352,7 @@ class tag_uint32: public tag_data_ptr
 	public:
 	
 		tag_uint32 (uint16 code,
-				    uint32 value = 0)
+					uint32 value = 0)
 			
 			:	tag_data_ptr (code, ttLong, 1, &fValue)
 			
@@ -348,14 +376,90 @@ class tag_uint32_ptr: public tag_data_ptr
 	public:
 	
 		tag_uint32_ptr (uint16 code,
-				 		const uint32 *data,
-				 		uint32 count = 1)
+						const uint32 *data,
+						uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttLong, count, data)
 			
 			{
 			}
 			
+	};
+
+/******************************************************************************/
+
+class tag_big_uint: public tiff_tag
+	{
+	
+	private:
+	
+		uint64 fValue;
+
+	public:
+	
+		tag_big_uint (uint16 code,
+					  uint64 value = 0)
+					  
+			:	tiff_tag (code, ttLong, 1)
+			
+			,	fValue (value)
+			
+			{
+			}
+			
+		void Set (uint64 value)
+			{
+			fValue = value;
+			}
+	
+		virtual void SetBigTIFF (bool isBigTIFF)
+			{
+			fType = (uint16)(isBigTIFF ? ttLong8 : ttLong);
+			}
+	
+		virtual void Put (dng_stream &stream) const;
+
+	};
+
+/******************************************************************************/
+
+class tag_big_uints: public tiff_tag
+	{
+	
+	private:
+	
+		dng_memory_data fData;
+		
+		bool fAlways32;
+
+	public:
+	
+		tag_big_uints (uint16 code,
+					   uint32 count = 1,
+					   bool always32 = false)
+							  
+			:	tiff_tag (code, ttLong, count)
+			
+			,	fData (count, 8)
+			
+			,	fAlways32 (always32)
+			
+			{
+			}
+
+		void Set (uint32 index,
+				  uint64 value)
+			{
+			fData.Buffer_uint64 () [index] = value;
+			}
+	
+		virtual void SetBigTIFF (bool isBigTIFF)
+			{
+			fType = (uint16)(isBigTIFF && !fAlways32 ? ttLong8 : ttLong);
+			}
+	
+		virtual void Put (dng_stream &stream) const;
+
 	};
 
 /******************************************************************************/
@@ -370,7 +474,7 @@ class tag_urational: public tag_data_ptr
 	public:
 	
 		tag_urational (uint16 code,
-				       const dng_urational &value)
+					   const dng_urational &value)
 			
 			:	tag_data_ptr (code, ttRational, 1, &fValue)
 			
@@ -389,8 +493,8 @@ class tag_urational_ptr: public tag_data_ptr
 	public:
 	
 		tag_urational_ptr (uint16 code,
-				           const dng_urational *data = NULL,
-				           uint32 count = 1)
+						   const dng_urational *data = NULL,
+						   uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttRational, count, data)
 			
@@ -411,7 +515,7 @@ class tag_srational: public tag_data_ptr
 	public:
 	
 		tag_srational (uint16 code,
-				       const dng_srational &value)
+					   const dng_srational &value)
 			
 			:	tag_data_ptr (code, ttSRational, 1, &fValue)
 			
@@ -430,14 +534,42 @@ class tag_srational_ptr: public tag_data_ptr
 	public:
 	
 		tag_srational_ptr (uint16 code,
-				           const dng_srational *data = NULL,
-				           uint32 count = 1)
+						   const dng_srational *data = NULL,
+						   uint32 count = 1)
 			
 			:	tag_data_ptr (code, ttSRational, count, data)
 			
 			{
 			}
 			
+	};
+
+/******************************************************************************/
+
+class tag_real32: public tag_data_ptr
+	{
+	
+	private:
+	
+		real32 fValue;
+		
+	public:
+	
+		tag_real32 (uint16 code,
+					real32 value = 0.0f)
+			
+			:	tag_data_ptr (code, ttFloat, 1, &fValue)
+			
+			,	fValue (value)
+			
+			{
+			}
+			
+		void Set (real32 value)
+			{
+			fValue = value;
+			}
+		
 	};
 
 /******************************************************************************/
@@ -452,7 +584,7 @@ class tag_real64: public tag_data_ptr
 	public:
 	
 		tag_real64 (uint16 code,
-				    real64 value = 0.0)
+					real64 value = 0.0)
 			
 			:	tag_data_ptr (code, ttDouble, 1, &fValue)
 			
@@ -481,8 +613,8 @@ class tag_matrix: public tag_srational_ptr
 	public:
 	
 		tag_matrix (uint16 code,
-				    const dng_matrix &m);
-				    	   
+					const dng_matrix &m);
+						   
 	};
 
 /******************************************************************************/
@@ -511,14 +643,14 @@ class tag_cfa_pattern: public tiff_tag
 	public:
 	
 		tag_cfa_pattern (uint16 code,
-					   	 uint32 rows,
-					     uint32 cols,
-					   	 const uint8 *pattern)
+						 uint32 rows,
+						 uint32 cols,
+						 const uint8 *pattern)
 					   
 			:	tiff_tag (code, ttUndefined, 4 + rows * cols)
 			
-			,	fRows    (rows   )
-			,	fCols    (cols   )
+			,	fRows	 (rows	 )
+			,	fCols	 (cols	 )
 			,	fPattern (pattern)
 			
 			{
@@ -526,14 +658,6 @@ class tag_cfa_pattern: public tiff_tag
 			
 		virtual void Put (dng_stream &stream) const;
 			
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		tag_cfa_pattern (const tag_cfa_pattern &tag);
-		
-		tag_cfa_pattern & operator= (const tag_cfa_pattern &tag);
-					 
 	};
 	
 /******************************************************************************/
@@ -548,7 +672,7 @@ class tag_exif_date_time: public tag_data_ptr
 	public:
 	
 		tag_exif_date_time (uint16 code,
-				            const dng_date_time &dt);
+							const dng_date_time &dt);
 			
 	};
 
@@ -570,14 +694,6 @@ class tag_iptc: public tiff_tag
 			
 		virtual void Put (dng_stream &stream) const;
 
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		tag_iptc (const tag_iptc &tag);
-		
-		tag_iptc & operator= (const tag_iptc &tag);
-					 
 	};
 
 /******************************************************************************/
@@ -593,40 +709,28 @@ class tag_xmp: public tag_uint8_ptr
 		
 		tag_xmp (const dng_xmp *xmp);
 				 
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		tag_xmp (const tag_xmp &tag);
-		
-		tag_xmp & operator= (const tag_xmp &tag);
-					 
 	};
 
 /******************************************************************************/
 
-class dng_tiff_directory
+class dng_tiff_directory: private dng_uncopyable
 	{
 	
 	private:
 	
-		enum
-			{
-			kMaxEntries = 100
-			};
-			
-		uint32 fEntries;
+		std::vector<tiff_tag *> fTag;
 		
-		const tiff_tag *fTag [kMaxEntries];
+		uint64 fChained;
 		
-		uint32 fChained;
+		bool fBigTIFF;
 		
 	public:
 	
 		dng_tiff_directory ()
 		
-			:	fEntries (0)
+			:	fTag	 ()
 			,	fChained (0)
+			,	fBigTIFF (false)
 			
 			{
 			}
@@ -635,13 +739,15 @@ class dng_tiff_directory
 			{
 			}
 			
-		void Add (const tiff_tag *tag);
+		void Add (tiff_tag *tag);
 		
-		void SetChained (uint32 offset)
+		void SetChained (uint64 offset)
 			{
 			fChained = offset;
 			}
 		
+		void SetBigTIFF (bool isBigTIFF);
+			
 		uint32 Size () const;
 		
 		enum OffsetsBase
@@ -653,21 +759,13 @@ class dng_tiff_directory
 
 		void Put (dng_stream &stream,
 				  OffsetsBase offsetsBase = offsetsRelativeToStream,
-				  uint32 explicitBase = 0) const;
+				  uint64 explicitBase = 0) const;
 	
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		dng_tiff_directory (const dng_tiff_directory &dir);
-		
-		dng_tiff_directory & operator= (const dng_tiff_directory &dir);
-					 
 	};
 
 /******************************************************************************/
 
-class dng_basic_tag_set
+class dng_basic_tag_set: private dng_uncopyable
 	{
 	
 	private:
@@ -683,7 +781,7 @@ class dng_basic_tag_set
 	
 		tag_uint16 fSamplesPerPixel;
 	
-		uint16 fBitsPerSampleData [kMaxSamplesPerPixel];
+		std::vector<uint16> fBitsPerSampleData;
 		
 		tag_uint16_ptr fBitsPerSample;
 		
@@ -691,56 +789,55 @@ class dng_basic_tag_set
 								 
 		tag_uint32 fTileWidth;
 		tag_uint32 fTileLength;
+		
+		tag_big_uints fTileOffsets;
+		
+		tag_big_uints fTileByteCounts;
 
-		dng_memory_data fTileInfoBuffer;
-		
-		uint32 *fTileOffsetData;
-		
-		tag_uint32_ptr fTileOffsets;
-		
-		uint32 *fTileByteCountData;
-		
-		tag_uint32_ptr fTileByteCounts;
-								
 		tag_uint16 fPlanarConfiguration;
 	
 		tag_uint16 fCompression;
 		
 		tag_uint16 fPredictor;
 		
-		uint16 fExtraSamplesData [kMaxSamplesPerPixel];
+		std::vector<uint16> fExtraSamplesData;
 		
 		tag_uint16_ptr fExtraSamples;
 		
-		uint16 fSampleFormatData [kMaxSamplesPerPixel];
+		std::vector<uint16> fSampleFormatData;
 		
 		tag_uint16_ptr fSampleFormat;
 		
 		tag_uint16 fRowInterleaveFactor;
+		tag_uint16 fColumnInterleaveFactor;
 		
 		uint16 fSubTileBlockSizeData [2];
 		
 		tag_uint16_ptr fSubTileBlockSize;
+		
+		tag_real32 fJXLDistance;
+		tag_uint32 fJXLEffort;
+		tag_uint32 fJXLDecodeSpeed;
 
 	public:
 	
 		dng_basic_tag_set (dng_tiff_directory &directory,
-					       const dng_ifd &info);
+						   const dng_ifd &info);
 					   
 		virtual ~dng_basic_tag_set ()
 			{
 			}
-					 
+								
 		void SetTileOffset (uint32 index,
-							uint32 offset)
+							uint64 offset)
 			{
-			fTileOffsetData [index] = offset;
+			fTileOffsets.Set (index, offset);
 			}
 			
 		void SetTileByteCount (uint32 index,
-							   uint32 count)
+							   uint64 count)
 			{
-			fTileByteCountData [index] = count;
+			fTileByteCounts.Set (index, count);
 			}
 			
 		bool WritingStrips () const
@@ -748,19 +845,16 @@ class dng_basic_tag_set
 			return fStrips;
 			}
 			
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		dng_basic_tag_set (const dng_basic_tag_set &set);
-		
-		dng_basic_tag_set & operator= (const dng_basic_tag_set &set);
-					 
+		uint16 Compression () const
+			{
+			return fCompression.Get ();
+			}
+			
 	};
 	
 /******************************************************************************/
 
-class exif_tag_set
+class exif_tag_set: private dng_uncopyable
 	{
 	
 	protected:
@@ -770,8 +864,8 @@ class exif_tag_set
 		
 	private:
 		
-		tag_uint32 fExifLink;
-		tag_uint32 fGPSLink;
+		tag_big_uint fExifLink;
+		tag_big_uint fGPSLink;
 		
 		bool fAddedExifLink;
 		bool fAddedGPSLink;
@@ -843,8 +937,10 @@ class exif_tag_set
 		
 		tag_uint16 fSelfTimerMode;
 		
-		tag_string    fBatteryLevelA;
+		tag_string	  fBatteryLevelA;
 		tag_urational fBatteryLevelR;
+		
+		tag_uint16	  fColorSpace;
 		
 		tag_urational fFocalPlaneXResolution;
 		tag_urational fFocalPlaneYResolution;
@@ -866,7 +962,11 @@ class exif_tag_set
 		tag_string fSubsecTime;
 		tag_string fSubsecTimeOriginal;
 		tag_string fSubsecTimeDigitized;
-		
+  
+		tag_string fOffsetTime;
+		tag_string fOffsetTimeOriginal;
+		tag_string fOffsetTimeDigitized;
+
 		tag_string fMake;
 		tag_string fModel;
 		tag_string fArtist;
@@ -894,18 +994,27 @@ class exif_tag_set
 		tag_string fLensMake;
 		tag_string fLensModel;
 		tag_string fLensSerialNumber;
+  
+		// EXIF 2.3.1 tags.
+		
+		tag_srational fTemperature;
+		tag_urational fHumidity;
+		tag_urational fPressure;
+		tag_srational fWaterDepth;
+		tag_urational fAcceleration;
+		tag_srational fCameraElevationAngle;
 		
 		uint8 fGPSVersionData [4];
 		
 		tag_uint8_ptr fGPSVersionID;
 		
-		tag_string        fGPSLatitudeRef;
+		tag_string		  fGPSLatitudeRef;
 		tag_urational_ptr fGPSLatitude;
 		
-		tag_string        fGPSLongitudeRef;
+		tag_string		  fGPSLongitudeRef;
 		tag_urational_ptr fGPSLongitude;
 		
-		tag_uint8     fGPSAltitudeRef;
+		tag_uint8	  fGPSAltitudeRef;
 		tag_urational fGPSAltitude;
 		
 		tag_urational_ptr fGPSTimeStamp;
@@ -916,27 +1025,27 @@ class exif_tag_set
 		
 		tag_urational fGPSDOP;
 		
-		tag_string    fGPSSpeedRef;
+		tag_string	  fGPSSpeedRef;
 		tag_urational fGPSSpeed;
 		
-		tag_string    fGPSTrackRef;
+		tag_string	  fGPSTrackRef;
 		tag_urational fGPSTrack;
 		
-		tag_string    fGPSImgDirectionRef;
+		tag_string	  fGPSImgDirectionRef;
 		tag_urational fGPSImgDirection;
 		
 		tag_string fGPSMapDatum;
 		
-		tag_string        fGPSDestLatitudeRef;
+		tag_string		  fGPSDestLatitudeRef;
 		tag_urational_ptr fGPSDestLatitude;
 		
-		tag_string         fGPSDestLongitudeRef;
+		tag_string		  fGPSDestLongitudeRef;
 		tag_urational_ptr fGPSDestLongitude;
 		
-		tag_string    fGPSDestBearingRef;
+		tag_string	  fGPSDestBearingRef;
 		tag_urational fGPSDestBearing;
 		
-		tag_string    fGPSDestDistanceRef;
+		tag_string	  fGPSDestDistanceRef;
 		tag_urational fGPSDestDistance;
 		
 		tag_encoded_text fGPSProcessingMethod;
@@ -957,7 +1066,13 @@ class exif_tag_set
 					  uint32 makerNoteLength = 0,
 					  bool insideDNG = false);
 					
-		void Locate (uint32 offset)
+		void SetBigTIFF (bool isBigTIFF)
+			{
+			fExifIFD.SetBigTIFF (isBigTIFF);
+			fGPSIFD .SetBigTIFF (isBigTIFF);
+			}
+			
+		void Locate (uint64 offset)
 			{
 			fExifLink.Set (offset);
 			fGPSLink .Set (offset + fExifIFD.Size ());
@@ -979,17 +1094,11 @@ class exif_tag_set
 	
 		void AddLinks (dng_tiff_directory &directory);
 	
-	private:
-	
-		// Hidden copy constructor and assignment operator.
-		
-		exif_tag_set (const exif_tag_set &set);
-		
-		exif_tag_set & operator= (const exif_tag_set &set);
-					 
 	};
 
 /******************************************************************************/
+
+class profile_tag_set;
 
 class tiff_dng_extended_color_profile: private dng_tiff_directory
 	{
@@ -997,13 +1106,22 @@ class tiff_dng_extended_color_profile: private dng_tiff_directory
 	protected:
 
 		const dng_camera_profile &fProfile;
+		
+		AutoPtr<profile_tag_set> fProfileTagSet;
+
+		tag_string fCameraModelTag;
 
 	public:
 
-		tiff_dng_extended_color_profile (const dng_camera_profile &profile);
+		tiff_dng_extended_color_profile (const dng_camera_profile &profile,
+										 bool includeModelRestriction = true);
 
-		void Put (dng_stream &stream,
-				  bool includeModelRestriction = true);
+		virtual ~tiff_dng_extended_color_profile ();
+
+		void Put (dng_host &host,
+				  dng_stream &stream);
+				  
+		uint64 DataSize ();
 
 	};
 
@@ -1024,22 +1142,119 @@ class tag_dng_noise_profile: public tag_data_ptr
 
 /*****************************************************************************/
 
-// Enum to control the subset of metadata to save to a file.
+// Class to control the subset of metadata to save to a file.
 
-enum dng_metadata_subset
+class dng_metadata_subset
 	{
 	
-	kMetadataSubset_CopyrightOnly = 0,
-	kMetadataSubset_CopyrightAndContact,
-	kMetadataSubset_AllExceptCameraInfo,
-	kMetadataSubset_All,
-	kMetadataSubset_AllExceptLocationInfo,
-	kMetadataSubset_AllExceptCameraAndLocation,
+	public:
 	
-	kMetadataSubset_Last = kMetadataSubset_AllExceptCameraAndLocation
-	
-	};
+		enum
+			{
 
+			kMask_Copyright	 = 0x00000001,
+			kMask_Contact	 = 0x00000002,
+			kMask_Location	 = 0x00000004,
+			kMask_Exif		 = 0x00000008,
+			kMask_Keywords	 = 0x00000010,
+			kMask_CameraRaw	 = 0x00000020,
+			kMask_Rating	 = 0x00000040,
+			kMask_Label		 = 0x00000080,
+			kMask_Caption	 = 0x00000100,
+			kMask_Title		 = 0x00000200,
+			kMask_Regions	 = 0x00000400,		// Includes face info
+			kMask_ExifDate	 = 0x00000800,
+
+			kMask_Other		 = 0x80000000,
+			
+			kMask_All		 = 0xFFFFFFFF
+
+			};
+	
+	private:
+	
+		uint32 fMask;
+		
+	public:
+	
+		dng_metadata_subset (uint32 mask = kMask_All)
+		
+			:	fMask (mask)
+			
+			{
+			}
+			
+		uint32 Mask () const
+			{
+			return fMask;
+			}
+			
+		bool operator== (const dng_metadata_subset &subset) const
+			{
+			return fMask == subset.fMask;
+			}
+
+		bool operator!= (const dng_metadata_subset &subset) const
+			{
+			return !(*this == subset);
+			}
+			
+		bool Includes (uint32 mask) const
+			{
+			return (fMask & mask) == mask;
+			}
+
+		bool Excludes (uint32 mask) const
+			{
+			return (fMask & mask) == 0;
+			}
+
+	};
+	
+// Metadata subset mask values for legacy API:
+
+enum
+	{
+	
+	kMetadataSubset_CopyrightOnly =
+		dng_metadata_subset::kMask_Copyright,
+	
+	kMetadataSubset_CopyrightAndContact =
+		dng_metadata_subset::kMask_Copyright +
+		dng_metadata_subset::kMask_Contact +
+		dng_metadata_subset::kMask_Title,
+										  
+	kMetadataSubset_All =
+		dng_metadata_subset::kMask_All,
+	
+	kMetadataSubset_AllExceptLocationInfo =
+		dng_metadata_subset::kMask_All -
+		dng_metadata_subset::kMask_Location,
+											
+	kMetadataSubset_AllExceptCameraInfo =
+		dng_metadata_subset::kMask_All -
+		dng_metadata_subset::kMask_Exif -
+		dng_metadata_subset::kMask_CameraRaw,
+										  
+	kMetadataSubset_AllExceptCameraAndLocation =
+		dng_metadata_subset::kMask_All -
+		dng_metadata_subset::kMask_Exif -
+		dng_metadata_subset::kMask_CameraRaw -
+		dng_metadata_subset::kMask_Location,
+		
+	kMetadataSubset_AllExceptCameraRawInfo =
+		dng_metadata_subset::kMask_All -
+		dng_metadata_subset::kMask_CameraRaw,
+
+	kMetadataSubset_AllExceptCameraRawInfoAndLocation =
+		dng_metadata_subset::kMask_All -
+		dng_metadata_subset::kMask_CameraRaw -
+		dng_metadata_subset::kMask_Location,
+
+	kMetadataSubset_ExifDate = dng_metadata_subset::kMask_ExifDate
+
+	};
+ 
 /*****************************************************************************/
 
 /// \brief Support for writing dng_image or dng_negative instances to a
@@ -1048,8 +1263,7 @@ enum dng_metadata_subset
 class dng_image_writer
 	{
 	
-	friend class dng_jpeg_image;
-	friend class dng_jpeg_image_encode_task;
+	friend class dng_compressed_image_encode_task;
 	friend class dng_write_tiles_task;
 	
 	protected:
@@ -1070,43 +1284,34 @@ class dng_image_writer
 		virtual ~dng_image_writer ();
 		
 		virtual void EncodeJPEGPreview (dng_host &host,
-							            const dng_image &image,
-							            dng_jpeg_preview &preview,
-							            int32 quality = -1);
+										const dng_image &image,
+										dng_jpeg_preview &preview,
+										int32 quality = -1);
 
 		virtual void WriteImage (dng_host &host,
-						         const dng_ifd &ifd,
-						         dng_basic_tag_set &basic,
-						         dng_stream &stream,
-						         const dng_image &image,
-						         uint32 fakeChannels = 1);
-						    
+								 const dng_ifd &ifd,
+								 dng_basic_tag_set &basic,
+								 dng_stream &stream,
+								 const dng_image &image,
+								 uint32 fakeChannels = 1,
+								 dng_fingerprint *outDigest = nullptr);
+							
 		/// Write a dng_image to a dng_stream in TIFF format.
 		/// \param host Host interface used for progress updates, abort testing, buffer allocation, etc.
 		/// \param stream The dng_stream on which to write the TIFF.
 		/// \param image The actual image data to be written.
 		/// \param photometricInterpretation Either piBlackIsZero for monochrome or piRGB for RGB images.
 		/// \param compression Must be ccUncompressed.
-		/// \param negative or metadata If non-NULL, EXIF, IPTC, and XMP metadata from this negative is written to TIFF. 
+		/// \param metadata If non-NULL, EXIF, IPTC, and XMP metadata from this is written to TIFF.
 		/// \param space If non-null and color space has an ICC profile, TIFF will be tagged with this
 		/// profile. No color space conversion of image data occurs.
 		/// \param resolution If non-NULL, TIFF will be tagged with this resolution.
 		/// \param thumbnail If non-NULL, will be stored in TIFF as preview image.
 		/// \param imageResources If non-NULL, will image resources be stored in TIFF as well.
 		/// \param metadataSubset The subset of metadata (e.g., copyright only) to include in the TIFF.
+		/// \param hasTransparency Does the image change a transparency channel?
+		/// \param allowBigTIFF Automatically write BigTIFF format if required?
 
-		void WriteTIFF (dng_host &host,
-						dng_stream &stream,
-						const dng_image &image,
-						uint32 photometricInterpretation,
-						uint32 compression,
-						dng_negative *negative,
-						const dng_color_space *space = NULL,
-						const dng_resolution *resolution = NULL,
-						const dng_jpeg_preview *thumbnail = NULL,
-						const dng_memory_block *imageResources = NULL,
-						dng_metadata_subset metadataSubset = kMetadataSubset_All);
-								
 		void WriteTIFF (dng_host &host,
 						dng_stream &stream,
 						const dng_image &image,
@@ -1117,7 +1322,11 @@ class dng_image_writer
 						const dng_resolution *resolution = NULL,
 						const dng_jpeg_preview *thumbnail = NULL,
 						const dng_memory_block *imageResources = NULL,
-						dng_metadata_subset metadataSubset = kMetadataSubset_All);
+						dng_metadata_subset metadataSubset = kMetadataSubset_All,
+						bool hasTransparency = false,
+						bool allowBigTIFF = true,
+						const dng_image *gainMapImage = nullptr,
+						bool useHalfFloat = false);
 								
 		/// Write a dng_image to a dng_stream in TIFF format.
 		/// \param host Host interface used for progress updates, abort testing, buffer allocation, etc.
@@ -1125,7 +1334,7 @@ class dng_image_writer
 		/// \param image The actual image data to be written.
 		/// \param photometricInterpretation Either piBlackIsZero for monochrome or piRGB for RGB images.
 		/// \param compression Must be ccUncompressed.
-		/// \param negative or metadata If non-NULL, EXIF, IPTC, and XMP metadata from this negative is written to TIFF. 
+		/// \param metadata If non-NULL, EXIF, IPTC, and XMP metadata from this is written to TIFF.
 		/// \param profileData If non-null, TIFF will be tagged with this profile. No color space conversion
 		/// of image data occurs.
 		/// \param profileSize The size for the profile data.
@@ -1133,20 +1342,9 @@ class dng_image_writer
 		/// \param thumbnail If non-NULL, will be stored in TIFF as preview image.
 		/// \param imageResources If non-NULL, will image resources be stored in TIFF as well.
 		/// \param metadataSubset The subset of metadata (e.g., copyright only) to include in the TIFF.
+		/// \param hasTransparency Does the image change a transparency channel?
+		/// \param allowBigTIFF Automatically write BigTIFF format if required?
 
-		void WriteTIFFWithProfile (dng_host &host,
-								   dng_stream &stream,
-								   const dng_image &image,
-								   uint32 photometricInterpretation,
-								   uint32 compression,
-								   dng_negative *negative,
-								   const void *profileData = NULL,
-								   uint32 profileSize = 0,
-								   const dng_resolution *resolution = NULL,
-								   const dng_jpeg_preview *thumbnail = NULL,
-								   const dng_memory_block *imageResources = NULL,
-								   dng_metadata_subset metadataSubset = kMetadataSubset_All);
-								
 		virtual void WriteTIFFWithProfile (dng_host &host,
 										   dng_stream &stream,
 										   const dng_image &image,
@@ -1158,7 +1356,11 @@ class dng_image_writer
 										   const dng_resolution *resolution = NULL,
 										   const dng_jpeg_preview *thumbnail = NULL,
 										   const dng_memory_block *imageResources = NULL,
-										   dng_metadata_subset metadataSubset = kMetadataSubset_All);
+										   dng_metadata_subset metadataSubset = kMetadataSubset_All,
+										   bool hasTransparency = false,
+										   bool allowBigTIFF = true,
+										   const dng_image *gainMapImage = nullptr,
+										   bool useHalfFloat = false);
 								
 		/// Write a dng_image to a dng_stream in DNG format.
 		/// \param host Host interface used for progress updates, abort testing, buffer allocation, etc.
@@ -1167,13 +1369,18 @@ class dng_image_writer
 		/// \param previewList List of previews (not counting thumbnail) to write to the file. Defaults to empty.
 		/// \param maxBackwardVersion The DNG file should be readable by readers at least back to this version.
 		/// \param uncompressed True to force uncompressed images. Otherwise use normal compression.
+		/// \param gainMapImage Optional gain map image.
+		/// \param gainMapLossyCompressed Optional lossy compressed gain map image.
 
 		void WriteDNG (dng_host &host,
 					   dng_stream &stream,
 					   dng_negative &negative,
 					   const dng_preview_list *previewList = NULL,
 					   uint32 maxBackwardVersion = dngVersion_SaveDefault,
-					   bool uncompressed = false);
+					   bool uncompressed = false,
+					   bool allowBigTIFF = true,
+					   const dng_image *gainMapImage = nullptr,
+					   const dng_lossy_compressed_image *gainMapLossyCompressed = nullptr);
 							   
 		/// Write a dng_image to a dng_stream in DNG format.
 		/// \param host Host interface used for progress updates, abort testing, buffer allocation, etc.
@@ -1183,14 +1390,19 @@ class dng_image_writer
 		/// \param previewList List of previews (not counting thumbnail) to write to the file. Defaults to empty.
 		/// \param maxBackwardVersion The DNG file should be readable by readers at least back to this version.
 		/// \param uncompressed True to force uncompressed images. Otherwise use normal compression.
+		/// \param gainMapImage Optional gain map image.
+		/// \param gainMapLossyCompressed Optional lossy compressed gain map image.
 
-		virtual void WriteDNG (dng_host &host,
-							   dng_stream &stream,
-							   const dng_negative &negative,
-							   const dng_metadata &metadata,
-							   const dng_preview_list *previewList = NULL,
-							   uint32 maxBackwardVersion = dngVersion_SaveDefault,
-							   bool uncompressed = false);
+		virtual void WriteDNGWithMetadata (dng_host &host,
+										   dng_stream &stream,
+										   const dng_negative &negative,
+										   const dng_metadata &metadata,
+										   const dng_preview_list *previewList = NULL,
+										   uint32 maxBackwardVersion = dngVersion_SaveDefault,
+										   bool uncompressed = false,
+										   bool allowBigTIFF = true,
+										   const dng_image *gainMapImage = nullptr,
+										   const dng_lossy_compressed_image *gainMapLossyCompressed = nullptr);
 
 		/// Resolve metadata conflicts and apply metadata policies in keeping
 		/// with Metadata Working Group (MWG) guidelines.
@@ -1198,19 +1410,23 @@ class dng_image_writer
 		virtual void CleanUpMetadata (dng_host &host,
 									  dng_metadata &metadata,
 									  dng_metadata_subset metadataSubset,
-									  const char *dstMIMI,
+									  const char *dstMIME,
 									  const char *software = NULL);
 		
 	protected:
+
+		virtual void UpdateExifColorSpaceTag (dng_metadata &metadata,
+											  const void *profileData,
+											  const uint32 profileSize);
 	
 		virtual uint32 CompressedBufferSize (const dng_ifd &ifd,
 											 uint32 uncompressedSize);
 											 
 		virtual void EncodePredictor (dng_host &host,
 									  const dng_ifd &ifd,
-						        	  dng_pixel_buffer &buffer,
+									  dng_pixel_buffer &buffer,
 									  AutoPtr<dng_memory_block> &tempBuffer);
-						        	  
+									  
 		virtual void ByteSwapBuffer (dng_host &host,
 									 dng_pixel_buffer &buffer);
 									 
@@ -1218,24 +1434,121 @@ class dng_image_writer
 								   dng_pixel_buffer &buffer,
 								   AutoPtr<dng_memory_block> &uncompressedBuffer,
 								   AutoPtr<dng_memory_block> &subTileBlockBuffer);
-						    
+							
 		virtual void WriteData (dng_host &host,
 								const dng_ifd &ifd,
-						        dng_stream &stream,
-						        dng_pixel_buffer &buffer,
-								AutoPtr<dng_memory_block> &compressedBuffer);
-						        
+								dng_stream &stream,
+								dng_pixel_buffer &buffer,
+								AutoPtr<dng_memory_block> &compressedBuffer,
+								bool usingMultipleThreads);
+								
 		virtual void WriteTile (dng_host &host,
-						        const dng_ifd &ifd,
-						        dng_stream &stream,
-						        const dng_image &image,
-						        const dng_rect &tileArea,
-						        uint32 fakeChannels,
+								const dng_ifd &ifd,
+								dng_stream &stream,
+								const dng_image &image,
+								const dng_rect &tileArea,
+								uint32 fakeChannels,
 								AutoPtr<dng_memory_block> &compressedBuffer,
 								AutoPtr<dng_memory_block> &uncompressedBuffer,
 								AutoPtr<dng_memory_block> &subTileBlockBuffer,
-								AutoPtr<dng_memory_block> &tempBuffer);
-								
+								AutoPtr<dng_memory_block> &tempBuffer,
+								bool usingMultipleThreads);
+	
+		virtual void DoWriteTiles (dng_host &host,
+								   const dng_ifd &ifd,
+								   dng_basic_tag_set &basic,
+								   dng_stream &stream,
+								   const dng_image &image,
+								   uint32 fakeChannels,
+								   uint32 tilesDown,
+								   uint32 tilesAcross,
+								   uint32 compressedSize,
+								   const dng_safe_uint32 &uncompressedSize,
+								   dng_fingerprint *outDigest);
+
+	};
+
+/*****************************************************************************/
+
+class dng_write_tiles_task : public dng_area_task,
+							 private dng_uncopyable
+	{
+	
+	protected:
+	
+		dng_image_writer &fImageWriter;
+		
+		dng_host &fHost;
+		
+		const dng_ifd &fIFD;
+		
+		dng_basic_tag_set &fBasic;
+		
+		dng_stream &fStream;
+		
+		const dng_image &fImage;
+		
+		uint32 fFakeChannels;
+		
+		uint32 fTilesDown;
+		
+		uint32 fTilesAcross;
+		
+		uint32 fCompressedSize;
+		
+		uint32 fUncompressedSize;
+		
+		std::atomic_uint fNextTileIndex;
+		
+		dng_mutex fMutex;
+		
+		dng_condition fCondition;
+		
+		bool fTaskFailed;
+
+		uint32 fWriteTileIndex;
+
+		const bool fNeedDigest;
+
+		mutable dng_md5_printer fOverallPrinter;
+		
+	public:
+	
+		dng_write_tiles_task (dng_image_writer &imageWriter,
+							  dng_host &host,
+							  const dng_ifd &ifd,
+							  dng_basic_tag_set &basic,
+							  dng_stream &stream,
+							  const dng_image &image,
+							  uint32 fakeChannels,
+							  uint32 tilesDown,
+							  uint32 tilesAcross,
+							  uint32 compressedSize,
+							  uint32 uncompressedSize,
+							  bool needDigest);
+
+		void Process (uint32 threadIndex,
+					  const dng_rect &tile,
+					  dng_abort_sniffer *sniffer);
+
+		const dng_fingerprint & ResultDigest () const;
+
+	protected:
+
+		void ProcessTask (uint32 tileIndex,
+						  AutoPtr<dng_memory_block> &compressedBuffer,
+						  AutoPtr<dng_memory_block> &uncompressedBuffer,
+						  AutoPtr<dng_memory_block> &subTileBlockBuffer,
+						  AutoPtr<dng_memory_block> &tempBuffer,
+						  uint32 &tileByteCount, // output
+						  dng_memory_stream &tileStream, // output
+						  dng_abort_sniffer *sniffer);
+
+		void WriteTask (uint32 tileIndex,
+						uint32 tileByteCount,
+						dng_memory_stream &tileStream,
+						dng_abort_sniffer *sniffer);
+		
 	};
 	
 /*****************************************************************************/
