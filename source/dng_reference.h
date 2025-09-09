@@ -1,16 +1,9 @@
 /*****************************************************************************/
-// Copyright 2006-2009 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
-/*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_reference.h#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
 /*****************************************************************************/
 
 #ifndef __dng_reference__
@@ -19,6 +12,8 @@
 /*****************************************************************************/
 
 #include "dng_bottlenecks.h"
+#include "dng_simd_type.h"
+#include "dng_flags.h"
 
 /*****************************************************************************/
 
@@ -32,10 +27,10 @@ void RefCopyBytes (const void *sPtr,
 /*****************************************************************************/
 
 void RefSwapBytes16 (uint16 *dPtr,
-				     uint32 count);
+					 uint32 count);
 				   
 void RefSwapBytes32 (uint32 *dPtr,
-				     uint32 count);
+					 uint32 count);
 				   
 /*****************************************************************************/
 
@@ -47,18 +42,10 @@ void RefSetArea8 (uint8 *dPtr,
 				  int32 rowStep,
 				  int32 colStep,
 				  int32 planeStep);
-				   
-void RefSetArea16 (uint16 *dPtr,
-				   uint16 value,
-				   uint32 rows,
-				   uint32 cols,
-				   uint32 planes,
-				   int32 rowStep,
-				   int32 colStep,
-				   int32 planeStep);
 
-void RefSetArea32 (uint32 *dPtr,
-				   uint32 value,
+template <SIMDType simd, typename destType>
+void RefSetArea	  (destType *dPtr,
+				   destType value,
 				   uint32 rows,
 				   uint32 cols,
 				   uint32 planes,
@@ -140,17 +127,18 @@ void RefCopyArea8_32 (const uint8 *sPtr,
 					  int32 dColStep,
 					  int32 dPlaneStep);
 
+template <SIMDType simd>
 void RefCopyArea16_S16 (const uint16 *sPtr,
-					    int16 *dPtr,
-					    uint32 rows,
-					    uint32 cols,
-					    uint32 planes,
-					    int32 sRowStep,
-					    int32 sColStep,
-					    int32 sPlaneStep,
-					    int32 dRowStep,
-					    int32 dColStep,
-					    int32 dPlaneStep);
+						int16 *dPtr,
+						uint32 rows,
+						uint32 cols,
+						uint32 planes,
+						int32 sRowStep,
+						int32 sColStep,
+						int32 sPlaneStep,
+						int32 dRowStep,
+						int32 dColStep,
+						int32 dPlaneStep);
 
 void RefCopyArea16_32 (const uint16 *sPtr,
 					   uint32 *dPtr,
@@ -178,29 +166,29 @@ void RefCopyArea8_R32 (const uint8 *sPtr,
 					   uint32 pixelRange);
 
 void RefCopyArea16_R32 (const uint16 *sPtr,
-					    real32 *dPtr,
-					    uint32 rows,
-					    uint32 cols,
-					    uint32 planes,
-					    int32 sRowStep,
-					    int32 sColStep,
-					    int32 sPlaneStep,
-					    int32 dRowStep,
-					    int32 dColStep,
-					    int32 dPlaneStep,
+						real32 *dPtr,
+						uint32 rows,
+						uint32 cols,
+						uint32 planes,
+						int32 sRowStep,
+						int32 sColStep,
+						int32 sPlaneStep,
+						int32 dRowStep,
+						int32 dColStep,
+						int32 dPlaneStep,
 						uint32 pixelRange);
 
 void RefCopyAreaS16_R32 (const int16 *sPtr,
-					     real32 *dPtr,
-					     uint32 rows,
-					     uint32 cols,
-					     uint32 planes,
-					     int32 sRowStep,
-					     int32 sColStep,
-					     int32 sPlaneStep,
-					     int32 dRowStep,
-					     int32 dColStep,
-					     int32 dPlaneStep,
+						 real32 *dPtr,
+						 uint32 rows,
+						 uint32 cols,
+						 uint32 planes,
+						 int32 sRowStep,
+						 int32 sColStep,
+						 int32 sPlaneStep,
+						 int32 dRowStep,
+						 int32 dColStep,
+						 int32 dPlaneStep,
 						 uint32 pixelRange);
 
 void RefCopyAreaR32_8 (const real32 *sPtr,
@@ -217,29 +205,29 @@ void RefCopyAreaR32_8 (const real32 *sPtr,
 					   uint32 pixelRange);
 
 void RefCopyAreaR32_16 (const real32 *sPtr,
-					    uint16 *dPtr,
-					    uint32 rows,
-					    uint32 cols,
-					    uint32 planes,
-					    int32 sRowStep,
-					    int32 sColStep,
-					    int32 sPlaneStep,
-					    int32 dRowStep,
-					    int32 dColStep,
-					    int32 dPlaneStep,
+						uint16 *dPtr,
+						uint32 rows,
+						uint32 cols,
+						uint32 planes,
+						int32 sRowStep,
+						int32 sColStep,
+						int32 sPlaneStep,
+						int32 dRowStep,
+						int32 dColStep,
+						int32 dPlaneStep,
 						uint32 pixelRange);
 
 void RefCopyAreaR32_S16 (const real32 *sPtr,
-					     int16 *dPtr,
-					     uint32 rows,
-					     uint32 cols,
-					     uint32 planes,
-					     int32 sRowStep,
-					     int32 sColStep,
-					     int32 sPlaneStep,
-					     int32 dRowStep,
-					     int32 dColStep,
-					     int32 dPlaneStep,
+						 int16 *dPtr,
+						 uint32 rows,
+						 uint32 cols,
+						 uint32 planes,
+						 int32 sRowStep,
+						 int32 sColStep,
+						 int32 sPlaneStep,
+						 int32 dRowStep,
+						 int32 dColStep,
+						 int32 dPlaneStep,
 						 uint32 pixelRange);
 
 /*****************************************************************************/
@@ -302,7 +290,7 @@ void RefBilinearRow16 (const uint16 *sPtr,
 					   uint32 patPhase,
 					   uint32 patCount,
 					   const uint32 * kernCounts,
-					   const int32  * const * kernOffsets,
+					   const int32	* const * kernOffsets,
 					   const uint16 * const * kernWeights,
 					   uint32 sShift);
 
@@ -312,7 +300,7 @@ void RefBilinearRow32 (const real32 *sPtr,
 					   uint32 patPhase,
 					   uint32 patCount,
 					   const uint32 * kernCounts,
-					   const int32  * const * kernOffsets,
+					   const int32	* const * kernOffsets,
 					   const real32 * const * kernWeights,
 					   uint32 sShift);
 
@@ -350,7 +338,8 @@ void RefBaselineHueSatMap (const real32 *sPtrR,
 						   uint32 count,
 						   const dng_hue_sat_map &lut,
 						   const dng_1d_table *encodeTable,
-						   const dng_1d_table *decodeTable);
+						   const dng_1d_table *decodeTable,
+						   const bool supportOverrange);
 
 /*****************************************************************************/
 
@@ -359,7 +348,8 @@ void RefBaselineRGBtoGray (const real32 *sPtrR,
 						   const real32 *sPtrB,
 						   real32 *dPtrG,
 						   uint32 count,
-						   const dng_matrix &matrix);
+						   const dng_matrix &matrix,
+						   const bool supportOverrange);
 
 void RefBaselineRGBtoRGB (const real32 *sPtrR,
 						  const real32 *sPtrG,
@@ -368,7 +358,8 @@ void RefBaselineRGBtoRGB (const real32 *sPtrR,
 						  real32 *dPtrG,
 						  real32 *dPtrB,
 						  uint32 count,
-						  const dng_matrix &matrix);
+						  const dng_matrix &matrix,
+						  const bool supportOverrange);
 
 /*****************************************************************************/
 
@@ -501,7 +492,8 @@ void RefVignette32 (real32 *sPtr,
 					int32 sRowStep,
 					int32 sPlaneStep,
 					int32 mRowStep,
-					uint32 mBits);
+					uint32 mBits,
+					uint16 blackLevel);
 
 /*****************************************************************************/
 
@@ -516,6 +508,88 @@ void RefMapArea16 (uint16 *dPtr,
 
 /*****************************************************************************/
 
-#endif
+void RefBaselineMapPoly32 (real32 *dPtr,
+						   const int32 rowStep,
+						   const uint32 rows,
+						   const uint32 cols,
+						   const uint32 rowPitch,
+						   const uint32 colPitch,
+						   const real32 *coefficients,
+						   const uint32 degree,
+						   uint16 blackLevel);
+
+/*****************************************************************************/
+
+void RefBaselineProfileGainTableMap (const real32 *rSrcPtr,
+									 const real32 *gSrcPtr,
+									 const real32 *bSrcPtr,
+									 real32 *rDstPtr,
+									 real32 *gDstPtr,
+									 real32 *bDstPtr,
+									 const uint32 cols,
+									 const int32 top,
+									 const int32 left,
+									 const dng_rect &imageArea,
+									 const real32 exposureWeightGain,
+									 const dng_gain_table_map &gainTableMap,
+									 const bool supportOverrange);
+
+/*****************************************************************************/
+
+void RefRGBtoRGBTable3D (real32 *rPtr,
+						 real32 *gPtr,
+						 real32 *bPtr,
+						 const real32 *mPtr,
+						 uint32 rows,
+						 uint32 cols,
+						 int32 rowStep,
+						 int32 mRowStep,
+						 uint32 divisions,
+						 const uint16 *samples,
+						 real32 amount,
+						 uint32 gamut,
+						 const dng_matrix *encodeMatrix,
+						 const dng_matrix *decodeMatrix,
+						 const dng_1d_table *encodeGamma,
+						 const dng_1d_table *decodeGamma,
+						 const bool supportOverrange);
+
+/*****************************************************************************/
+
+void RefRGBtoRGBTable1D (real32 *rPtr,
+						 real32 *gPtr,
+						 real32 *bPtr,
+						 const real32 *mPtr,
+						 uint32 rows,
+						 uint32 cols,
+						 int32 rowStep,
+						 int32 mRowStep,
+						 const dng_1d_table &table0,
+						 const dng_1d_table &table1,
+						 const dng_1d_table &table2,
+						 uint32 gamut,
+						 const dng_matrix *encodeMatrix,
+						 const dng_matrix *decodeMatrix,
+						 const bool supportOverrange);
+
+/*****************************************************************************/
+
+void RefMaskedRGBTables32 (real32 *ptr0,
+						   real32 *ptr1,
+						   real32 *ptr2,
+						   const real32 *tablePtr0,
+						   const real32 *tablePtr1,
+						   const real32 *tablePtr2,
+						   const real32 *maskPtr,
+						   uint32 numTransforms,
+						   int32 pRowStep,
+						   int32 tRowStep,
+						   int32 tPlaneStep,
+						   uint32 rows,
+						   uint32 cols);
+
+/*****************************************************************************/
+
+#endif	// __dng_reference__
 	
 /*****************************************************************************/
