@@ -1,16 +1,9 @@
 /*****************************************************************************/
-// Copyright 2006 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
-/*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_resample.cpp#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
 /*****************************************************************************/
 
 #include "dng_resample.h"
@@ -44,15 +37,15 @@ real64 dng_resample_bicubic::Evaluate (real64 x) const
 	
 	x = Abs_real64 (x);
 
-    if (x >= 2.0)
-        return 0.0;
-        
-    else if (x >= 1.0)
-        return (((A * x - 5.0 * A) * x + 8.0 * A) * x - 4.0 * A);
-        
-    else
-        return (((A + 2.0) * x - (A + 3.0)) * x * x + 1.0);
-    
+	if (x >= 2.0)
+		return 0.0;
+		
+	else if (x >= 1.0)
+		return (((A * x - 5.0 * A) * x + 8.0 * A) * x - 4.0 * A);
+		
+	else
+		return (((A + 2.0) * x - (A + 3.0)) * x * x + 1.0);
+	
 	}
 
 /******************************************************************************/
@@ -97,11 +90,16 @@ void dng_resample_coords::Initialize (int32 srcOrigin,
 	
 	uint32 dstEntries = 0;
 	uint32 bufferSize = 0;
-	if (!RoundUpUint32ToMultiple(dstCount, 8, &dstEntries) ||
-	    !SafeUint32Mult(dstEntries, sizeof(int32), &bufferSize)) {
-		ThrowMemoryFull("Arithmetic overflow computing size for coordinate "
-						"buffer");
-	}
+
+	if (!RoundUpUint32ToMultiple (dstCount, 8, &dstEntries) ||
+		!SafeUint32Mult (dstEntries, sizeof (int32), &bufferSize)) 
+		{
+
+		ThrowOverflow ("Arithmetic overflow computing size for coordinate "
+					   "buffer");
+
+		}
+
 	fCoords.Reset (allocator.Allocate (bufferSize));
 	
 	int32 *coords = fCoords->Buffer_int32 ();
@@ -179,7 +177,7 @@ void dng_resample_weights::Initialize (real64 scale,
 	if (!RoundUpUint32ToMultiple (width, 8, &fWeightStep))
 		{
 		
-		ThrowMemoryFull ("Arithmetic overflow computing fWeightStep");
+		ThrowOverflow ("Arithmetic overflow computing fWeightStep");
 		
 		}
 	
@@ -188,10 +186,10 @@ void dng_resample_weights::Initialize (real64 scale,
 	uint32 bufferSize = 0;
 	
 	if (!SafeUint32Mult (fWeightStep, kResampleSubsampleCount, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, (uint32) sizeof (real32), &bufferSize))
+		!SafeUint32Mult (bufferSize, (uint32) sizeof (real32), &bufferSize))
 		{
 		
-		ThrowMemoryFull("Arithmetic overflow computing buffer size.");
+		ThrowOverflow ("Arithmetic overflow computing buffer size.");
 		
 		}
 	
@@ -201,10 +199,10 @@ void dng_resample_weights::Initialize (real64 scale,
 				 fWeights32->LogicalSize ());
 				 
 	if (!SafeUint32Mult (fWeightStep, kResampleSubsampleCount, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, (uint32) sizeof (int16), &bufferSize))
+		!SafeUint32Mult (bufferSize, (uint32) sizeof (int16), &bufferSize))
 		{
 		
-		ThrowMemoryFull("Arithmetic overflow computing buffer size.");
+		ThrowOverflow ("Arithmetic overflow computing buffer size.");
 		
 		}
 		
@@ -318,20 +316,20 @@ void dng_resample_weights_2d::Initialize (const dng_resample_function &kernel,
 	
 	// Width is twice the radius.
 	
-	uint32 width    = 0;
+	uint32 width	= 0;
 	uint32 widthSqr = 0;
-	uint32 step = 0;
+	uint32 step		= 0;
 	
 	if (!SafeUint32Mult (fRadius, 2, &width) ||
-		 !SafeUint32Mult (width, width, &widthSqr) ||
-		 !RoundUpUint32ToMultiple (widthSqr, 8, &step) ||
-		 !SafeUint32Mult (step, kResampleSubsampleCount2D, &fRowStep))
-			{
-			
-			ThrowMemoryFull ("Arithmetic overflow computing row step.");
-			
-			}
+		!SafeUint32Mult (width, width, &widthSqr) ||
+		!RoundUpUint32ToMultiple (widthSqr, 8, &step) ||
+		!SafeUint32Mult (step, kResampleSubsampleCount2D, &fRowStep))
+		{
+
+		ThrowOverflow ("Arithmetic overflow computing row step.");
 	
+		}
+
 	fColStep = step;
 	
 	// Allocate and zero weight tables.
@@ -339,11 +337,11 @@ void dng_resample_weights_2d::Initialize (const dng_resample_function &kernel,
 	uint32 bufferSize = 0;
 
 	if (!SafeUint32Mult (step, kResampleSubsampleCount2D, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, kResampleSubsampleCount2D, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, (uint32) sizeof (real32), &bufferSize))
+		!SafeUint32Mult (bufferSize, kResampleSubsampleCount2D, &bufferSize) ||
+		!SafeUint32Mult (bufferSize, (uint32) sizeof (real32), &bufferSize))
 		{
 		
-		ThrowMemoryFull ("Arithmetic overflow computing buffer size.");
+		ThrowOverflow ("Arithmetic overflow computing buffer size.");
 		
 		}
 	
@@ -352,14 +350,13 @@ void dng_resample_weights_2d::Initialize (const dng_resample_function &kernel,
 	DoZeroBytes (fWeights32->Buffer		 (),
 				 fWeights32->LogicalSize ());
 				 
-	
 	if (!SafeUint32Mult (step, kResampleSubsampleCount2D, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, kResampleSubsampleCount2D, &bufferSize) ||
-		 !SafeUint32Mult (bufferSize, (uint32) sizeof (int16), &bufferSize))
+		!SafeUint32Mult (bufferSize, kResampleSubsampleCount2D, &bufferSize) ||
+		!SafeUint32Mult (bufferSize, (uint32) sizeof (int16), &bufferSize))
 		{
-		
-		ThrowMemoryFull ("Arithmetic overflow computing buffer size.");
-		
+
+		ThrowOverflow ("Arithmetic overflow computing buffer size.");
+
 		}
 	
 	fWeights16.Reset (allocator.Allocate (bufferSize));
@@ -418,7 +415,7 @@ void dng_resample_weights_2d::Initialize (const dng_resample_function &kernel,
 						// Separable.
 
 						w32 [index] = (real32) kernel.Evaluate (xPos) *
-							          (real32) kernel.Evaluate (yPos);
+									  (real32) kernel.Evaluate (yPos);
 				
 						#endif
 
@@ -464,8 +461,8 @@ void dng_resample_weights_2d::Initialize (const dng_resample_function &kernel,
 				// Adjust one of the center entries for any round off error so total
 				// is exactly 16384.
 
-				const uint32 xOffset      = fRadius - ((xFract >= 0.5) ? 0 : 1);
-				const uint32 yOffset      = fRadius - ((yFract >= 0.5) ? 0 : 1);
+				const uint32 xOffset	  = fRadius - ((xFract >= 0.5) ? 0 : 1);
+				const uint32 yOffset	  = fRadius - ((yFract >= 0.5) ? 0 : 1);
 				const uint32 centerOffset = width * yOffset + xOffset;
 			
 				w16 [centerOffset] += (int16) (16384 - t16);
@@ -516,6 +513,7 @@ class dng_resample_task: public dng_filter_task
 		virtual dng_point SrcTileSize (const dng_point &dstTileSize);
 			
 		virtual void Start (uint32 threadCount,
+							const dng_rect &dstArea,
 							const dng_point &tileSize,
 							dng_memory_allocator *allocator,
 							dng_abort_sniffer *sniffer);
@@ -529,12 +527,13 @@ class dng_resample_task: public dng_filter_task
 /*****************************************************************************/
 
 dng_resample_task::dng_resample_task (const dng_image &srcImage,
-						   			  dng_image &dstImage,
-						   			  const dng_rect &srcBounds,
-						   			  const dng_rect &dstBounds,
+									  dng_image &dstImage,
+									  const dng_rect &srcBounds,
+									  const dng_rect &dstBounds,
 									  const dng_resample_function &kernel)
-						   			  
-	:	dng_filter_task (srcImage,
+									  
+	:	dng_filter_task ("dng_resample_task",
+						 srcImage,
 						 dstImage)
 						   
 	,	fSrcBounds (srcBounds)
@@ -554,13 +553,9 @@ dng_resample_task::dng_resample_task (const dng_image &srcImage,
 	,	fSrcTileSize ()
 	
 	{
-	if (fRowScale == 0 || fColScale == 0)
-		{
-		 ThrowBadFormat ();
-	}
 	
-	if (srcImage.PixelSize  () <= 2 &&
-		dstImage.PixelSize  () <= 2 &&
+	if (srcImage.PixelSize	() <= 2 &&
+		dstImage.PixelSize	() <= 2 &&
 		srcImage.PixelRange () == dstImage.PixelRange ())
 		{
 		fSrcPixelType = ttShort;
@@ -593,22 +588,23 @@ dng_rect dng_resample_task::SrcArea (const dng_rect &dstArea)
 	int32 offsetV = fWeightsV.Offset ();
 	int32 offsetH = fWeightsH.Offset ();
 	
-	uint32 widthV = fWeightsV.Width ();
-	uint32 widthH = fWeightsH.Width ();
+	int32 widthV = ConvertUint32ToInt32 (fWeightsV.Width ());
+	int32 widthH = ConvertUint32ToInt32 (fWeightsH.Width ());
 	
 	dng_rect srcArea;
 	
 	srcArea.t = SafeInt32Add (fRowCoords.Pixel (dstArea.t), offsetV);
 	srcArea.l = SafeInt32Add (fColCoords.Pixel (dstArea.l), offsetH);
 
-	srcArea.b = SafeInt32Add (SafeInt32Add (
-						fRowCoords.Pixel (SafeInt32Sub (dstArea.b, 1)),
-						offsetV),
-					ConvertUint32ToInt32 (widthV));;
-	srcArea.r = SafeInt32Add(SafeInt32Add(
-						fColCoords.Pixel (SafeInt32Sub (dstArea.r, 1)),
-						offsetH),
-					ConvertUint32ToInt32(widthH));;
+	srcArea.b = SafeInt32Add (SafeInt32Add
+							  (fRowCoords.Pixel (SafeInt32Sub (dstArea.b, 1)),
+							   offsetV),
+							  widthV);
+	
+	srcArea.r = SafeInt32Add (SafeInt32Add
+							  (fColCoords.Pixel (SafeInt32Sub (dstArea.r, 1)),
+							   offsetH),
+							  widthH);
 	
 	return srcArea;
 	
@@ -626,6 +622,7 @@ dng_point dng_resample_task::SrcTileSize (const dng_point & /* dstTileSize */)
 /*****************************************************************************/
 
 void dng_resample_task::Start (uint32 threadCount,
+							   const dng_rect &dstArea,
 							   const dng_point &tileSize,
 							   dng_memory_allocator *allocator,
 							   dng_abort_sniffer *sniffer)
@@ -664,13 +661,14 @@ void dng_resample_task::Start (uint32 threadCount,
 	// Allocate temp buffers.
 	
 	uint32 tempBufferSize = 0;
+
 	if (!RoundUpUint32ToMultiple (fSrcTileSize.h, 8, &tempBufferSize) ||
-		 !SafeUint32Mult (tempBufferSize,
-			 static_cast<uint32> (sizeof (real32)),
-			 &tempBufferSize))
+		!SafeUint32Mult (tempBufferSize,
+						 static_cast<uint32> (sizeof (real32)),
+						 &tempBufferSize))
 		{
 		
-		ThrowMemoryFull("Arithmetic overflow computing buffer size.");
+		ThrowOverflow ("Arithmetic overflow computing buffer size.");
 		
 		}
 	
@@ -684,6 +682,7 @@ void dng_resample_task::Start (uint32 threadCount,
 	// Allocate the pixel buffers.
 
 	dng_filter_task::Start (threadCount,
+							dstArea,
 							tileSize,
 							allocator,
 							sniffer);
@@ -693,8 +692,8 @@ void dng_resample_task::Start (uint32 threadCount,
 /*****************************************************************************/
 
 void dng_resample_task::ProcessArea (uint32 threadIndex,
-								     dng_pixel_buffer &srcBuffer,
-								     dng_pixel_buffer &dstBuffer)
+									 dng_pixel_buffer &srcBuffer,
+									 dng_pixel_buffer &dstBuffer)
 	{
 	
 	dng_rect srcArea = srcBuffer.fArea;
@@ -711,7 +710,7 @@ void dng_resample_task::ProcessArea (uint32 threadIndex,
 	
 	uint32 stepH = fWeightsH.Step ();
 	
-	const int32 *rowCoords = fRowCoords.Coords (0        );
+	const int32 *rowCoords = fRowCoords.Coords (0		 );
 	const int32 *colCoords = fColCoords.Coords (dstArea.l);
 	
 	if (fSrcPixelType == ttFloat)
