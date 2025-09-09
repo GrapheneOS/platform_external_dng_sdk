@@ -1,16 +1,9 @@
 /*****************************************************************************/
-// Copyright 2006-2008 Adobe Systems Incorporated
+// Copyright 2006-2019 Adobe Systems Incorporated
 // All Rights Reserved.
 //
-// NOTICE:  Adobe permits you to use, modify, and distribute this file in
+// NOTICE:	Adobe permits you to use, modify, and distribute this file in
 // accordance with the terms of the Adobe license agreement accompanying it.
-/*****************************************************************************/
-
-/* $Id: //mondo/dng_sdk_1_4/dng_sdk/source/dng_pixel_buffer.cpp#1 $ */ 
-/* $DateTime: 2012/05/30 13:28:51 $ */
-/* $Change: 832332 $ */
-/* $Author: tknoll $ */
-
 /*****************************************************************************/
 
 #include "dng_pixel_buffer.h"
@@ -18,22 +11,27 @@
 #include "dng_bottlenecks.h"
 #include "dng_exceptions.h"
 #include "dng_flags.h"
-#include "dng_safe_arithmetic.h"
 #include "dng_tag_types.h"
 #include "dng_tag_values.h"
 #include "dng_utils.h"
 
 /*****************************************************************************/
 
-namespace {
+static bool SafeUint32ToInt32Mult (uint32 arg1, 
+								   uint32 arg2, 
+								   int32 *result) 
+	{
 
-bool SafeUint32ToInt32Mult(uint32 arg1, uint32 arg2, int32 *result) {
 	uint32 uint32_result;
-	return SafeUint32Mult(arg1, arg2, &uint32_result) &&
-		ConvertUint32ToInt32(uint32_result, result);
-}
 
-} // namespace
+	return (SafeUint32Mult (arg1, 
+							arg2, 
+							&uint32_result) &&
+
+			ConvertUint32ToInt32 (uint32_result, 
+								  result));
+
+	}
 
 /*****************************************************************************/
 
@@ -344,21 +342,21 @@ void OptimizeOrder (void *&dPtr,
 
 dng_pixel_buffer::dng_pixel_buffer ()
 
-	:	fArea       ()
-	,	fPlane      (0)
-	,	fPlanes     (1)
-	,	fRowStep    (1)
-	,	fColStep    (1)
-	,	fPlaneStep  (1)
-	,	fPixelType  (ttUndefined)
-	,	fPixelSize  (0)
-	,	fData       (NULL)
-	,	fDirty      (true)
+	:	fArea		()
+	,	fPlane		(0)
+	,	fPlanes		(1)
+	,	fRowStep	(1)
+	,	fColStep	(1)
+	,	fPlaneStep	(1)
+	,	fPixelType	(ttUndefined)
+	,	fPixelSize	(0)
+	,	fData		(NULL)
+	,	fDirty		(true)
 	
 	{
 	
 	}
-
+							
 /*****************************************************************************/
 
 dng_pixel_buffer::dng_pixel_buffer (const dng_rect &area,
@@ -368,71 +366,102 @@ dng_pixel_buffer::dng_pixel_buffer (const dng_rect &area,
 									uint32 planarConfiguration,
 									void *data)
 
-	:	fArea       (area)
-	,	fPlane      (plane)
-	,	fPlanes     (planes)
-	,	fRowStep    (0)
-	,	fColStep    (0)
-	,	fPlaneStep  (0)
-	,	fPixelType  (pixelType)
-	,	fPixelSize  (TagTypeSize(pixelType))
-	,	fData       (data)
-	,	fDirty      (true)
+	:	fArea		(area)
+	,	fPlane		(plane)
+	,	fPlanes		(planes)
+	,	fRowStep	(0)
+	,	fColStep	(0)
+	,	fPlaneStep	(0)
+	,	fPixelType	(pixelType)
+	,	fPixelSize	(TagTypeSize (pixelType))
+	,	fData		(data)
+	,	fDirty		(true)
 	
 	{
 	
 	const char *overflowMessage = "Arithmetic overflow in pixel buffer setup";
-	
+
 	// Initialize fRowStep, fColStep and fPlaneStep according to the desired
 	// pixel layout.
+
 	switch (planarConfiguration)
 		{
+
 		case pcInterleaved:
-			fPlaneStep = 1;
-			if (!ConvertUint32ToInt32 (fPlanes, &fColStep) ||
-				!SafeUint32ToInt32Mult (fArea.W(), fPlanes, &fRowStep))
-				{
-				ThrowMemoryFull (overflowMessage);
-				}
-			break;
-		case pcPlanar:
-			fColStep = 1;
-			// Even though we've hardened dng_rect::W() to guarantee that it
-			// will never return a result that's out of range for an int32,
-			// we still protect the conversion for defense in depth.
-			if (!ConvertUint32ToInt32 (fArea.W(), &fRowStep) ||
-				!SafeUint32ToInt32Mult (fArea.H(), fArea.W(), &fPlaneStep))
-				{
-				ThrowMemoryFull (overflowMessage);
-				}
-			break;
-		case pcRowInterleaved:
-		case pcRowInterleavedAlign16:
 			{
+
+			fPlaneStep = 1;
+
+			if (!ConvertUint32ToInt32 (fPlanes, &fColStep) ||
+				!SafeUint32ToInt32Mult (fArea.W (), fPlanes, &fRowStep))
+				{
+				ThrowOverflow (overflowMessage);
+				}
+
+			break;
+
+			}
+
+		case pcPlanar:
+			{
+
 			fColStep = 1;
+
+			// Even though we've hardened dng_rect::W() to guarantee that it
+			// will never return a result that's out of range for an int32, we
+			// still protect the conversion for defense in depth.
+
+			if (!ConvertUint32ToInt32 (fArea.W (), &fRowStep) ||
+				!SafeUint32ToInt32Mult (fArea.H (), fArea.W (), &fPlaneStep))
+				{
+				ThrowOverflow (overflowMessage);
+				}
+
+			break;
+
+			}
+
+		case pcRowInterleaved:
+		case pcRowInterleavedAlignSIMD:
+			{
+
+			fColStep = 1;
+
 			uint32 planeStepUint32;
+
 			if (planarConfiguration == pcRowInterleaved)
 				{
-				planeStepUint32 = fArea.W();
+				planeStepUint32 = fArea.W ();
 				}
+
 			else
 				{
-				if (!RoundUpForPixelSize (fArea.W(), fPixelSize,
+
+				if (!RoundUpForPixelSize (fArea.W (), 
+										  fPixelSize,
 										  &planeStepUint32))
 					{
-					ThrowMemoryFull (overflowMessage);
+					ThrowOverflow (overflowMessage);
 					}
+
 				}
-			if (!ConvertUint32ToInt32 (planeStepUint32, &fPlaneStep) ||
+
+			if (!ConvertUint32ToInt32  (planeStepUint32, &fPlaneStep) ||
 				!SafeUint32ToInt32Mult (planeStepUint32, fPlanes, &fRowStep))
 				{
-				ThrowMemoryFull (overflowMessage);
+				ThrowOverflow (overflowMessage);
 				}
+
 			break;
+
 			}
+
 		default:
+			{
 			ThrowProgramError ("Invalid value for 'planarConfiguration'");
 			break;
+			}
+
 		}
 	
 	}
@@ -441,16 +470,16 @@ dng_pixel_buffer::dng_pixel_buffer (const dng_rect &area,
 
 dng_pixel_buffer::dng_pixel_buffer (const dng_pixel_buffer &buffer)
 
-	:	fArea       (buffer.fArea)
-	,	fPlane      (buffer.fPlane)
-	,	fPlanes     (buffer.fPlanes)
-	,	fRowStep    (buffer.fRowStep)
-	,	fColStep    (buffer.fColStep)
-	,	fPlaneStep  (buffer.fPlaneStep)
-	,	fPixelType  (buffer.fPixelType)
-	,	fPixelSize  (buffer.fPixelSize)
-	,	fData       (buffer.fData)
-	,	fDirty      (buffer.fDirty)
+	:	fArea		(buffer.fArea)
+	,	fPlane		(buffer.fPlane)
+	,	fPlanes		(buffer.fPlanes)
+	,	fRowStep	(buffer.fRowStep)
+	,	fColStep	(buffer.fColStep)
+	,	fPlaneStep	(buffer.fPlaneStep)
+	,	fPixelType	(buffer.fPixelType)
+	,	fPixelSize	(buffer.fPixelSize)
+	,	fData		(buffer.fData)
+	,	fDirty		(buffer.fDirty)
 	
 	{
 	
@@ -461,17 +490,17 @@ dng_pixel_buffer::dng_pixel_buffer (const dng_pixel_buffer &buffer)
 dng_pixel_buffer & dng_pixel_buffer::operator= (const dng_pixel_buffer &buffer)
 	{
 	
-	fArea       = buffer.fArea;
-	fPlane      = buffer.fPlane;
-	fPlanes     = buffer.fPlanes;
-	fRowStep    = buffer.fRowStep;
-	fColStep    = buffer.fColStep;
-	fPlaneStep  = buffer.fPlaneStep;
-	fPixelType  = buffer.fPixelType;
-	fPixelSize  = buffer.fPixelSize;
-	fPixelType  = buffer.fPixelType;
-	fData       = buffer.fData;
-	fDirty      = buffer.fDirty;
+	fArea		= buffer.fArea;
+	fPlane		= buffer.fPlane;
+	fPlanes		= buffer.fPlanes;
+	fRowStep	= buffer.fRowStep;
+	fColStep	= buffer.fColStep;
+	fPlaneStep	= buffer.fPlaneStep;
+	fPixelType	= buffer.fPixelType;
+	fPixelSize	= buffer.fPixelSize;
+	fPixelType	= buffer.fPixelType;
+	fData		= buffer.fData;
+	fDirty		= buffer.fDirty;
 	
 	return *this;
 	
@@ -549,11 +578,11 @@ void dng_pixel_buffer::SetConstant (const dng_rect &area,
 	uint32 cols = area.W ();
 	
 	void *dPtr = DirtyPixel (area.t,
-					    	 area.l,
-					    	 plane);
-					    
-	int32 dRowStep   = fRowStep;
-	int32 dColStep   = fColStep;
+							 area.l,
+							 plane);
+						
+	int32 dRowStep	 = fRowStep;
+	int32 dColStep	 = fColStep;
 	int32 dPlaneStep = fPlaneStep;
 	
 	OptimizeOrder (dPtr,
@@ -666,8 +695,8 @@ void dng_pixel_buffer::SetConstant (const dng_rect &area,
 /*****************************************************************************/
 
 void dng_pixel_buffer::SetZero (const dng_rect &area,
-					   			uint32 plane,
-					   			uint32 planes)
+								uint32 plane,
+								uint32 planes)
 	{
 					   
 	uint32 value = 0;
@@ -708,29 +737,29 @@ void dng_pixel_buffer::SetZero (const dng_rect &area,
 /*****************************************************************************/
 
 void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
-					   			 const dng_rect &area,
-					   			 uint32 srcPlane,
-					   			 uint32 dstPlane,
-					   			 uint32 planes)
+								 const dng_rect &area,
+								 uint32 srcPlane,
+								 uint32 dstPlane,
+								 uint32 planes)
 	{
 	
 	uint32 rows = area.H ();
 	uint32 cols = area.W ();
 	
 	const void *sPtr = src.ConstPixel (area.t,
-								  	   area.l,
-								  	   srcPlane);
+									   area.l,
+									   srcPlane);
 								  
 	void *dPtr = DirtyPixel (area.t,
-					   		 area.l,
-					    	 dstPlane);
+							 area.l,
+							 dstPlane);
 	
-	int32 sRowStep   = src.fRowStep;
-	int32 sColStep   = src.fColStep;
+	int32 sRowStep	 = src.fRowStep;
+	int32 sColStep	 = src.fColStep;
 	int32 sPlaneStep = src.fPlaneStep;
 	
-	int32 dRowStep   = fRowStep;
-	int32 dColStep   = fColStep;
+	int32 dRowStep	 = fRowStep;
+	int32 dColStep	 = fColStep;
 	int32 dPlaneStep = fPlaneStep;
 	
 	OptimizeOrder (sPtr,
@@ -840,16 +869,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea8_16 ((const uint8 *) sPtr,
-							    (uint16 *) dPtr,
-							    rows,
-							    cols,
-							    planes,
-							    sRowStep,
-							    sColStep,
-							    sPlaneStep,
-							    dRowStep,
-							    dColStep,
-							    dPlaneStep);
+								(uint16 *) dPtr,
+								rows,
+								cols,
+								planes,
+								sRowStep,
+								sColStep,
+								sPlaneStep,
+								dRowStep,
+								dColStep,
+								dPlaneStep);
 				
 				break;
 				
@@ -859,16 +888,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea8_S16 ((const uint8 *) sPtr,
-							     (int16 *) dPtr,
-							     rows,
-							     cols,
-							     planes,
-							     sRowStep,
-							     sColStep,
-							     sPlaneStep,
-							     dRowStep,
-							     dColStep,
-							     dPlaneStep);
+								 (int16 *) dPtr,
+								 rows,
+								 cols,
+								 planes,
+								 sRowStep,
+								 sColStep,
+								 sPlaneStep,
+								 dRowStep,
+								 dColStep,
+								 dPlaneStep);
 				
 				break;
 				
@@ -878,16 +907,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea8_32 ((const uint8 *) sPtr,
-							    (uint32 *) dPtr,
-							    rows,
-							    cols,
-							    planes,
-							    sRowStep,
-							    sColStep,
-							    sPlaneStep,
-							    dRowStep,
-							    dColStep,
-							    dPlaneStep);
+								(uint32 *) dPtr,
+								rows,
+								cols,
+								planes,
+								sRowStep,
+								sColStep,
+								sPlaneStep,
+								dRowStep,
+								dColStep,
+								dPlaneStep);
 				
 				break;
 				
@@ -897,16 +926,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea8_R32 ((const uint8 *) sPtr,
-							     (real32 *) dPtr,
-							     rows,
-							     cols,
-							     planes,
-							     sRowStep,
-							     sColStep,
-							     sPlaneStep,
-							     dRowStep,
-							     dColStep,
-							     dPlaneStep,
+								 (real32 *) dPtr,
+								 rows,
+								 cols,
+								 planes,
+								 sRowStep,
+								 sColStep,
+								 sPlaneStep,
+								 dRowStep,
+								 dColStep,
+								 dPlaneStep,
 								 src.PixelRange ());
 				
 				break;
@@ -953,16 +982,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea16_S16 ((const uint16 *) sPtr,
-							      (int16 *) dPtr,
-							      rows,
-							      cols,
-							      planes,
-							      sRowStep,
-							      sColStep,
-							      sPlaneStep,
-							      dRowStep,
-							      dColStep,
-							      dPlaneStep);
+								  (int16 *) dPtr,
+								  rows,
+								  cols,
+								  planes,
+								  sRowStep,
+								  sColStep,
+								  sPlaneStep,
+								  dRowStep,
+								  dColStep,
+								  dPlaneStep);
 				
 				break;
 				
@@ -972,16 +1001,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea16_32 ((const uint16 *) sPtr,
-							     (uint32 *) dPtr,
-							     rows,
-							     cols,
-							     planes,
-							     sRowStep,
-							     sColStep,
-							     sPlaneStep,
-							     dRowStep,
-							     dColStep,
-							     dPlaneStep);
+								 (uint32 *) dPtr,
+								 rows,
+								 cols,
+								 planes,
+								 sRowStep,
+								 sColStep,
+								 sPlaneStep,
+								 dRowStep,
+								 dColStep,
+								 dPlaneStep);
 				
 				break;
 				
@@ -991,16 +1020,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyArea16_R32 ((const uint16 *) sPtr,
-							      (real32 *) dPtr,
+								  (real32 *) dPtr,
 								  rows,
-							      cols,
-							      planes,
-							      sRowStep,
-							      sColStep,
-							      sPlaneStep,
-							      dRowStep,
-							      dColStep,
-							      dPlaneStep,
+								  cols,
+								  planes,
+								  sRowStep,
+								  sColStep,
+								  sPlaneStep,
+								  dRowStep,
+								  dColStep,
+								  dPlaneStep,
 								  src.PixelRange ());
 				
 				break;
@@ -1047,20 +1076,20 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				// Moving between signed 16 bit values and unsigned 16
-				// bit values just requires toggling the sign bit.  So
+				// bit values just requires toggling the sign bit.	So
 				// we can use the "backwards" bottleneck.
 				
 				DoCopyArea16_S16 ((const uint16 *) sPtr,
-							      (int16 *) dPtr,
-							      rows,
-							      cols,
-							      planes,
-							      sRowStep,
-							      sColStep,
-							      sPlaneStep,
-							      dRowStep,
-							      dColStep,
-							      dPlaneStep);
+								  (int16 *) dPtr,
+								  rows,
+								  cols,
+								  planes,
+								  sRowStep,
+								  sColStep,
+								  sPlaneStep,
+								  dRowStep,
+								  dColStep,
+								  dPlaneStep);
 				
 				break;
 				
@@ -1072,14 +1101,14 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				DoCopyAreaS16_R32 ((const int16 *) sPtr,
 								   (real32 *) dPtr,
 								   rows,
-							       cols,
-							       planes,
+								   cols,
+								   planes,
 								   sRowStep,
-							       sColStep,
+								   sColStep,
 								   sPlaneStep,
-							       dRowStep,
-							       dColStep,
-							       dPlaneStep,
+								   dRowStep,
+								   dColStep,
+								   dPlaneStep,
 								   src.PixelRange ());
 				
 				break;
@@ -1162,16 +1191,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyAreaR32_8 ((const real32 *) sPtr,
-							     (uint8 *) dPtr,
-							     rows,
-							     cols,
-							     planes,
-							     sRowStep,
-							     sColStep,
-							     sPlaneStep,
-							     dRowStep,
-							     dColStep,
-							     dPlaneStep,
+								 (uint8 *) dPtr,
+								 rows,
+								 cols,
+								 planes,
+								 sRowStep,
+								 sColStep,
+								 sPlaneStep,
+								 dRowStep,
+								 dColStep,
+								 dPlaneStep,
 								 PixelRange ());
 						
 				break;
@@ -1182,16 +1211,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyAreaR32_16 ((const real32 *) sPtr,
-							      (uint16 *) dPtr,
-							      rows,
-							      cols,
-							      planes,
-							      sRowStep,
-							      sColStep,
-							      sPlaneStep,
-							      dRowStep,
-							      dColStep,
-							      dPlaneStep,
+								  (uint16 *) dPtr,
+								  rows,
+								  cols,
+								  planes,
+								  sRowStep,
+								  sColStep,
+								  sPlaneStep,
+								  dRowStep,
+								  dColStep,
+								  dPlaneStep,
 								  PixelRange ());
 				
 				break;
@@ -1202,16 +1231,16 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 				{
 				
 				DoCopyAreaR32_S16 ((const real32 *) sPtr,
-							       (int16 *) dPtr,
-							       rows,
-							       cols,
-							       planes,
-							       sRowStep,
-							       sColStep,
-							       sPlaneStep,
-							       dRowStep,
-							       dColStep,
-							       dPlaneStep,
+								   (int16 *) dPtr,
+								   rows,
+								   cols,
+								   planes,
+								   sRowStep,
+								   sColStep,
+								   sPlaneStep,
+								   dRowStep,
+								   dColStep,
+								   dPlaneStep,
 								   PixelRange ());
 				
 				break;
@@ -1241,7 +1270,7 @@ void dng_pixel_buffer::CopyArea (const dng_pixel_buffer &src,
 /*****************************************************************************/
 
 dng_point dng_pixel_buffer::RepeatPhase (const dng_rect &srcArea,
-					   			   		 const dng_rect &dstArea)
+										 const dng_rect &dstArea)
 	{
 	
 	int32 repeatV = srcArea.H ();
@@ -1249,6 +1278,13 @@ dng_point dng_pixel_buffer::RepeatPhase (const dng_rect &srcArea,
 	
 	int32 phaseV;
 	int32 phaseH;
+
+	if (repeatV == 0 ||
+		repeatH == 0)
+		{
+		DNG_REPORT ("Bad srcArea in RepeatPhase");
+		return dng_point ();
+		}
 	
 	if (srcArea.t >= dstArea.t)
 		{
@@ -1275,7 +1311,7 @@ dng_point dng_pixel_buffer::RepeatPhase (const dng_rect &srcArea,
 /*****************************************************************************/
 
 void dng_pixel_buffer::RepeatArea (const dng_rect &srcArea,
-					   			   const dng_rect &dstArea)
+								   const dng_rect &dstArea)
 	{
 	
 	dng_point repeat = srcArea.Size ();
@@ -1284,9 +1320,9 @@ void dng_pixel_buffer::RepeatArea (const dng_rect &srcArea,
 								   dstArea);
 			
 	const void *sPtr = ConstPixel (srcArea.t,
-							  	   srcArea.l,
-							  	   fPlane);
-							  	   
+								   srcArea.l,
+								   fPlane);
+								   
 	void *dPtr = DirtyPixel (dstArea.t,
 							 dstArea.l,
 							 fPlane);
@@ -1321,17 +1357,17 @@ void dng_pixel_buffer::RepeatArea (const dng_rect &srcArea,
 			{
 			
 			DoRepeatArea16 ((const uint16 *) sPtr,
-					  		(uint16 *) dPtr,
-					  		rows,
-					  		cols,
-					  		fPlanes,
-					  		fRowStep,
-					  		fColStep,
-					  		fPlaneStep,
-					  		repeat.v,
-						    repeat.h,
-						    phase.v,
-						    phase.h);
+							(uint16 *) dPtr,
+							rows,
+							cols,
+							fPlanes,
+							fRowStep,
+							fColStep,
+							fPlaneStep,
+							repeat.v,
+							repeat.h,
+							phase.v,
+							phase.h);
 			
 			break;
 			
@@ -1341,17 +1377,17 @@ void dng_pixel_buffer::RepeatArea (const dng_rect &srcArea,
 			{
 			
 			DoRepeatArea32 ((const uint32 *) sPtr,
-					  		(uint32 *) dPtr,
-					  		rows,
-					  		cols,
-					  		fPlanes,
-					  		fRowStep,
-					  		fColStep,
-					  		fPlaneStep,
-					  		repeat.v,
-						    repeat.h,
-						    phase.v,
-						    phase.h);
+							(uint32 *) dPtr,
+							rows,
+							cols,
+							fPlanes,
+							fRowStep,
+							fColStep,
+							fPlaneStep,
+							repeat.v,
+							repeat.h,
+							phase.v,
+							phase.h);
 			
 			break;
 			
@@ -1378,10 +1414,10 @@ void dng_pixel_buffer::RepeatSubArea (const dng_rect subArea,
 	if (fArea.t < subArea.t)
 		{
 		
-		RepeatArea (dng_rect (subArea.t          , fArea.l,
+		RepeatArea (dng_rect (subArea.t			 , fArea.l,
 							  subArea.t + repeatV, fArea.r),
-					dng_rect (fArea.t            , fArea.l,
-							  subArea.t          , fArea.r));
+					dng_rect (fArea.t			 , fArea.l,
+							  subArea.t			 , fArea.r));
 							  
 		}
 	
@@ -1389,19 +1425,19 @@ void dng_pixel_buffer::RepeatSubArea (const dng_rect subArea,
 		{
 		
 		RepeatArea (dng_rect (subArea.b - repeatV, fArea.l,
-							  subArea.b          , fArea.r),
-					dng_rect (subArea.b          , fArea.l,
-							  fArea.b            , fArea.r));
+							  subArea.b			 , fArea.r),
+					dng_rect (subArea.b			 , fArea.l,
+							  fArea.b			 , fArea.r));
 							  
 		}
 		
 	if (fArea.l < subArea.l)
 		{
 		
-		RepeatArea (dng_rect (fArea.t, subArea.l          ,
+		RepeatArea (dng_rect (fArea.t, subArea.l		  ,
 							  fArea.b, subArea.l + repeatH),
-					dng_rect (fArea.t, fArea.l            ,
-							  fArea.b, subArea.l          ));
+					dng_rect (fArea.t, fArea.l			  ,
+							  fArea.b, subArea.l		  ));
 
 		}
 	
@@ -1409,9 +1445,9 @@ void dng_pixel_buffer::RepeatSubArea (const dng_rect subArea,
 		{
 		
 		RepeatArea (dng_rect (fArea.t, subArea.r - repeatH,
-							  fArea.b, subArea.r          ),
-					dng_rect (fArea.t, subArea.r          ,
-							  fArea.b, fArea.r            ));
+							  fArea.b, subArea.r		  ),
+					dng_rect (fArea.t, subArea.r		  ,
+							  fArea.b, fArea.r			  ));
 
 		}
 	
@@ -1440,12 +1476,12 @@ void dng_pixel_buffer::ShiftRight (uint32 shift)
 	
 	const void *sPtr = dPtr;
 	
-	int32 sRowStep   = fRowStep;
-	int32 sColStep   = fColStep;
+	int32 sRowStep	 = fRowStep;
+	int32 sColStep	 = fColStep;
 	int32 sPlaneStep = fPlaneStep;
 	
-	int32 dRowStep   = fRowStep;
-	int32 dColStep   = fColStep;
+	int32 dRowStep	 = fRowStep;
+	int32 dColStep	 = fColStep;
 	int32 dPlaneStep = fPlaneStep;
 	
 	OptimizeOrder (sPtr,
@@ -1463,13 +1499,13 @@ void dng_pixel_buffer::ShiftRight (uint32 shift)
 				   dPlaneStep);
 				   
 	DoShiftRight16 ((uint16 *) dPtr,
-				    rows,
-				    cols,
-				    planes,
-				    dRowStep,
-				    dColStep,
-				    dPlaneStep,
-				    shift);
+					rows,
+					cols,
+					planes,
+					dRowStep,
+					dColStep,
+					dPlaneStep,
+					shift);
 	
 	}
 		
@@ -1518,19 +1554,19 @@ bool dng_pixel_buffer::EqualArea (const dng_pixel_buffer &src,
 	uint32 cols = area.W ();
 	
 	const void *sPtr = src.ConstPixel (area.t,
-								  	   area.l,
-								  	   plane);
+									   area.l,
+									   plane);
 								  
 	const void *dPtr = ConstPixel (area.t,
 								   area.l,
 								   plane);
 	
-	int32 sRowStep   = src.fRowStep;
-	int32 sColStep   = src.fColStep;
+	int32 sRowStep	 = src.fRowStep;
+	int32 sColStep	 = src.fColStep;
 	int32 sPlaneStep = src.fPlaneStep;
 	
-	int32 dRowStep   = fRowStep;
-	int32 dColStep   = fColStep;
+	int32 dRowStep	 = fRowStep;
+	int32 dColStep	 = fColStep;
 	int32 dPlaneStep = fPlaneStep;
 
 	if (fPixelType == src.fPixelType)
@@ -1746,19 +1782,19 @@ real64 dng_pixel_buffer::MaximumDifference (const dng_pixel_buffer &rhs,
 	uint32 cols = area.W ();
 	
 	const void *s1Ptr = rhs.ConstPixel (area.t,
-								  	    area.l,
-								  	    plane);
+										area.l,
+										plane);
 								  
 	const void *s2Ptr = ConstPixel (area.t,
-								    area.l,
-								    plane);
+									area.l,
+									plane);
 	
-	int32 s1RowStep   = rhs.fRowStep;
-	int32 s1ColStep   = rhs.fColStep;
+	int32 s1RowStep	  = rhs.fRowStep;
+	int32 s1ColStep	  = rhs.fColStep;
 	int32 s1PlaneStep = rhs.fPlaneStep;
 	
-	int32 s2RowStep   = fRowStep;
-	int32 s2ColStep   = fColStep;
+	int32 s2RowStep	  = fRowStep;
+	int32 s2ColStep	  = fColStep;
 	int32 s2PlaneStep = fPlaneStep;
 
 	if (fPixelType == rhs.fPixelType)
