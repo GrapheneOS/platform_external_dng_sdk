@@ -104,7 +104,19 @@ cc_library {
     sdk_version: "current",
     defaults: ["libdng_sdk-defaults"],
 
-    cflags: ["-DqDNGValidate=0"],
+    sanitize: {
+        // For now we want to disable the ubsan_minimal runtime so that we can
+        // inject our own that converts ubsan errors into C++ exceptions.
+        // Soong doesn't have a flag for that specifically, but setting
+        // 'never' in combination with `-fsanitize=` cflags works for
+        never: true,
+    },
+
+    cflags: [
+        "-DqDNGValidate=0",
+        "-fsanitize=signed-integer-overflow,unsigned-integer-overflow",
+        "-fno-sanitize-link-runtime",
+    ],
 
     shared_libs: [
         "libz",
@@ -207,6 +219,8 @@ cc_library {
         "source/dng_xmp.cpp",
         "source/dng_xmp_sdk.cpp",
         "source/dng_xy_coord.cpp",
+
+        "ubsan-replacement/ubsan_throwing_runtime.cpp"
     ],
 
     target: {
